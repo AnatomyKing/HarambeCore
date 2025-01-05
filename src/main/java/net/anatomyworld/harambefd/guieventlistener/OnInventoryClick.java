@@ -37,7 +37,7 @@ public class OnInventoryClick implements Listener {
       return;
     }
 
-      // Validate top inventory and GUI key
+    // Validate top inventory and GUI key
     Inventory topInventory = event.getView().getTopInventory();
     String guiKey = guiBuilder.getGuiKeyByInventory(player, topInventory);
     if (guiKey == null) {
@@ -120,12 +120,12 @@ public class OnInventoryClick implements Listener {
     Bukkit.getScheduler().runTask(JavaPlugin.getPlugin(Harambefd.class), () -> {
       if (remainingAmount > 0) {
         cursorItem.setAmount(remainingAmount);
+        player.setItemOnCursor(cursorItem);
       } else {
         player.setItemOnCursor(null);
       }
     });
   }
-
   private void cancelEventWithMessage(InventoryClickEvent event, Player player) {
     event.setCancelled(true);
     player.sendMessage("Only registered items can be placed here.");

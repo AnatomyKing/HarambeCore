@@ -1,11 +1,8 @@
 package net.anatomyworld.harambefd.guieventlistener;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import net.anatomyworld.harambefd.EconomyHandler;
 import net.anatomyworld.harambefd.GuiBuilder;
 import net.anatomyworld.harambefd.harambemethods.ItemRegistry;
+import net.anatomyworld.harambefd.guieventlistener.GuiUtils;
 import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -14,6 +11,8 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+
+import java.util.Map;
 
 public class HandleCustomGui implements Listener {
   private final GuiBuilder guiBuilder;
@@ -26,121 +25,53 @@ public class HandleCustomGui implements Listener {
 
   @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
   public void handleCustomGuiClick(InventoryClickEvent event) {
-    Player player;
-    HumanEntity humanEntity = event.getWhoClicked();
-    if (humanEntity instanceof Player) {
-      player = (Player) humanEntity;
-    } else {
-      return;
-    }
+    HumanEntity entity = event.getWhoClicked();
+    if (!(entity instanceof Player player)) return;
 
     Inventory topInventory = event.getView().getTopInventory();
-    String guiKey = this.guiBuilder.getGuiKeyByInventory(player, topInventory);
-    if (guiKey == null)
-      return;
+    String guiKey = guiBuilder.getGuiKeyByInventory(player, topInventory);
+    if (guiKey == null) return;
 
     Inventory clickedInventory = event.getClickedInventory();
-    if (clickedInventory == null || !clickedInventory.equals(topInventory))
-      return;
+    if (clickedInventory == null || !clickedInventory.equals(topInventory)) return;
 
     int slot = event.getSlot();
-    Map<Integer, String> buttonKeyMap = this.guiBuilder.getButtonKeyMap(guiKey);
-    if (buttonKeyMap == null || !buttonKeyMap.containsKey(slot)) {
-      event.setCancelled(true);
-      return;
-    }
+    Map<Integer, String> buttonKeyMap = guiBuilder.getButtonKeyMap(guiKey);
 
-    String buttonKey = buttonKeyMap.get(slot);
-    if ("enderlink".equalsIgnoreCase(guiKey)) {
-      handleEnderlinkSlot(event, player, guiKey, topInventory, slot, buttonKey);
-      return;
-    }
+    if (buttonKeyMap != null && buttonKeyMap.containsKey(slot)) {
+      String buttonKey = buttonKeyMap.get(slot);
 
-    // Removed 'slot' parameter from the method call
-    handleStandardSlot(event, player, guiKey, topInventory, buttonKey);
-  }
-
-  private void handleEnderlinkSlot(InventoryClickEvent event, Player player, String guiKey, Inventory topInventory, int slot, String buttonKey) {
-    if (isSpecialSlot(buttonKey)) {
-      String requiredItemName = this.guiBuilder.getItemNameForSlot(guiKey, slot);
-      if (requiredItemName == null || requiredItemName.isEmpty()) {
+      if ("button".equalsIgnoreCase(buttonKey) || "filler".equalsIgnoreCase(buttonKey)) {
         event.setCancelled(true);
-        player.sendMessage("There is no defined item for this slot.");
         return;
       }
 
-      ItemStack cursorItem = event.getCursor();
-      if (cursorItem != null && !cursorItem.getType().isAir()) {
-        if (!this.itemRegistry.isItemRegistered(cursorItem)) {
-          event.setCancelled(true);
-          player.sendMessage("Only registered items can be placed in this slot!!");
-          return;
-        }
-
-        String cursorItemName = this.itemRegistry.getItemTag(cursorItem);
-        if (!requiredItemName.equals(cursorItemName)) {
-          event.setCancelled(true);
-          player.sendMessage("You can only place the item '" + requiredItemName + "' in this slot.");
-          return;
-        }
-
-        boolean consumeOnPlace = this.guiBuilder.shouldConsumeOnPlace(guiKey, slot);
-        if (consumeOnPlace)
-          consumeItems(event, player, topInventory, slot, cursorItem, guiKey);
+      if (GuiUtils.isSpecialSlot(buttonKey)) {
+        handleSpecialSlot(event, player, guiKey, topInventory, slot, buttonKey);
       }
     }
   }
 
-  // Removed 'slot' parameter from this method
-  private void handleStandardSlot(InventoryClickEvent event, Player player, String guiKey, Inventory topInventory, String buttonKey) {
-    event.setCancelled(true);
+  private void handleSpecialSlot(InventoryClickEvent event, Player player, String guiKey, Inventory inventory, int slot, String buttonKey) {
+    String requiredItemName = guiBuilder.getItemNameForSlot(guiKey, slot);
+
     ItemStack clickedItem = event.getCurrentItem();
     if (clickedItem != null && !clickedItem.getType().isAir()) {
-      List<Integer> slotsToProcess = this.guiBuilder.getSlotsForButton(guiKey, buttonKey);
-      Map<Integer, ItemStack> itemsToConsume = new HashMap<>();
-      for (int slotToProcess : slotsToProcess) {
-        ItemStack itemInSlot = topInventory.getItem(slotToProcess);
-        if (itemInSlot != null && !itemInSlot.getType().isAir()) {
-          double payAmount = this.guiBuilder.getSlotPayMap(guiKey).getOrDefault(slotToProcess, 0.0D);
-          if (payAmount > 0.0D) {
-            if (!EconomyHandler.hasEnoughBalance(player, payAmount)) {
-              player.sendMessage("You don't have enough balance for this action.");
-              continue;
-            }
-            EconomyHandler.withdrawBalance(player, payAmount);
-          }
-          itemsToConsume.put(slotToProcess, itemInSlot.clone());
-          topInventory.setItem(slotToProcess, null);
-        }
-      }
-      this.guiBuilder.handleButtonClick(player, guiKey, buttonKey, itemsToConsume);
-    }
-  }
-
-  private void consumeItems(InventoryClickEvent event, Player player, Inventory inventory, int slot, ItemStack cursorItem, String guiKey) {
-    int maxAmount = this.guiBuilder.getItemAmountForSlot(guiKey, slot);
-    int currentTotal = ItemAmountValidator.getTotalItemCount(inventory, List.of(slot));
-    if (currentTotal >= maxAmount) {
-      event.setCancelled(true);
-      player.sendMessage("This slot cannot hold more items.");
-      return;
-    }
-    double payAmount = this.guiBuilder.getSlotPayMap(guiKey).getOrDefault(slot, 0.0D);
-    if (payAmount > 0.0D) {
-      if (!EconomyHandler.hasEnoughBalance(player, payAmount)) {
-        player.sendMessage("You don't have enough balance to perform this action.");
-        event.setCancelled(true);
+      String itemName = itemRegistry.getItemTag(clickedItem);
+      if (itemName != null && itemName.equals(requiredItemName)) {
         return;
       }
-      EconomyHandler.withdrawBalance(player, payAmount);
     }
-    cursorItem.setAmount(0);
-    inventory.setItem(slot, null);
-    player.sendMessage("Item '" + this.itemRegistry.getItemTag(cursorItem) + "' has been consumed.");
-  }
 
-  private boolean isSpecialSlot(String buttonKey) {
-    return buttonKey.endsWith("_slot");
+    ItemStack cursorItem = event.getCursor();
+    if (!GuiUtils.validateItemPlacement(player, cursorItem, requiredItemName, itemRegistry)) {
+      event.setCancelled(true);
+      return;
+    }
+
+    boolean consumeOnPlace = guiBuilder.shouldConsumeOnPlace(guiKey, slot);
+    if (consumeOnPlace) {
+      GuiUtils.consumeItems(event, player, inventory, slot, cursorItem, guiKey, guiBuilder, itemRegistry);
+    }
   }
 }
-
