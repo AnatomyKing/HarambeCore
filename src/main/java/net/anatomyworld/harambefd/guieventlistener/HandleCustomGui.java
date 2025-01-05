@@ -73,7 +73,7 @@ public class HandleCustomGui implements Listener {
       if (cursorItem != null && !cursorItem.getType().isAir()) {
         if (!this.itemRegistry.isItemRegistered(cursorItem)) {
           event.setCancelled(true);
-          player.sendMessage("Only registered items can be placed in this slot!");
+          player.sendMessage("Only registered items can be placed in this slot!!");
           return;
         }
 
