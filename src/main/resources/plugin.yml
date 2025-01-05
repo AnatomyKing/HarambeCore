@@ -1,0 +1,20 @@
+name: Harambefd
+main: net.anatomyworld.harambefd.Harambefd
+version: '1.0.2'
+api-version: '1.20'
+author: YourName
+description: A plugin for managing custom GUIs, items, and integration with DungeonMMO.
+
+depend: [Vault]
+
+commands:
+  harambe:
+    description: Plugin management, item commands, and GUI access.
+    usage: /harambe <reload|give|set|GUI_NAME>
+    aliases: [md]
+    permission: harambefd.admin
+
+permissions:
+  harambefd.admin:
+    description: Permission to use admin commands like reload, item/reward management, and access GUIs.
+    default: op
