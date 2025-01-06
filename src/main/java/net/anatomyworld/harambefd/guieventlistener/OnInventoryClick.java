@@ -87,11 +87,7 @@ public class OnInventoryClick implements Listener {
     ItemStack cursorItem = event.getCursor();
     int slot = event.getSlot();
 
-    // Validate the item being placed
-    if (cursorItem == null || cursorItem.getType().isAir() || !itemRegistry.isItemRegistered(cursorItem)) {
-      cancelEventWithMessage(event, player);
-      return;
-    }
+    // Validate the item being place
 
     // Check item placement validity
     String requiredItemName = itemRegistry.getItemTag(cursorItem);
@@ -125,9 +121,5 @@ public class OnInventoryClick implements Listener {
         player.setItemOnCursor(null);
       }
     });
-  }
-  private void cancelEventWithMessage(InventoryClickEvent event, Player player) {
-    event.setCancelled(true);
-    player.sendMessage("Only registered items can be placed here.");
   }
 }
