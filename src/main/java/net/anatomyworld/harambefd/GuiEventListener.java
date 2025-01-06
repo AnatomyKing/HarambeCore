@@ -143,6 +143,7 @@ public class GuiEventListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onInventoryDrag(InventoryDragEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
+
         Inventory topInventory = event.getView().getTopInventory();
         if (topInventory == null) return;
 
@@ -151,80 +152,56 @@ public class GuiEventListener implements Listener {
 
         // ============ ENDERLINK LOGIC ============
         if ("enderlink".equalsIgnoreCase(guiKey)) {
-            // If they drag over a button/filler slot, cancel
             Map<Integer, String> buttonKeyMap = guiBuilder.getButtonKeyMap(guiKey);
             if (buttonKeyMap != null) {
                 for (int rawSlot : event.getRawSlots()) {
-                    // Check if rawSlot is within the bounds of the top inventory
-                    if (rawSlot >= 0 && rawSlot < topInventory.getSize()) {
-                        if (buttonKeyMap.containsKey(rawSlot)) {
-                            event.setCancelled(true);
-                            return;
-                        }
+                    // Cancel if dragging over a button or filler slot
+                    if (rawSlot >= 0 && rawSlot < topInventory.getSize() && buttonKeyMap.containsKey(rawSlot)) {
+                        event.setCancelled(true);
+                        return;
                     }
                 }
             }
             return; // Allow normal drag for other slots
         }
 
-        // =========== NON-ENDERLINK GUIs (old logic) ===========
-        ItemStack draggedItem = event.getOldCursor();
-        if (!itemRegistry.isItemRegistered(draggedItem)) {
-            event.setCancelled(true);
-            player.sendMessage("Only registered items can be placed in this GUI.");
-            return;
-        }
-
-        String itemName = itemRegistry.getItemTag(draggedItem);
+        // =========== NON-ENDERLINK GUIs ===========
         Map<Integer, ItemStack> slotItems = event.getNewItems();
-        int totalPlaced = 0;
-        boolean invalidPlacement = false;
 
         for (Map.Entry<Integer, ItemStack> entry : slotItems.entrySet()) {
             int slot = entry.getKey();
+            ItemStack draggedItem = entry.getValue();
+
+            // Ensure the slot is within bounds
             if (slot >= topInventory.getSize()) {
-                invalidPlacement = true;
-                break;
+                event.setCancelled(true);
+                return;
             }
 
-            ItemStack itemToPlace = entry.getValue();
+            // Validate dragged item
+            if (draggedItem == null || !itemRegistry.isItemRegistered(draggedItem)) {
+                event.setCancelled(true);
+                player.sendMessage("Only registered items can be placed in this GUI.");
+                return;
+            }
+
+            String itemName = itemRegistry.getItemTag(draggedItem);
             String requiredItemName = guiBuilder.getItemNameForSlot(guiKey, slot);
 
+            // Check if the item matches the required name
             if (requiredItemName == null || !requiredItemName.equals(itemName)) {
-                invalidPlacement = true;
-                break;
+                event.setCancelled(true);
+                player.sendMessage("You cannot place '" + itemName + "' in slot " + slot + ".");
+                return;
+            }
+
+            boolean consumeOnPlace = guiBuilder.shouldConsumeOnPlace(guiKey, slot);
+            if (consumeOnPlace) {
+                topInventory.setItem(slot, null);
+                player.sendMessage("Item '" + itemName + "' has been consumed in slot " + slot + ".");
             } else {
-                boolean consumeOnPlace = guiBuilder.shouldConsumeOnPlace(guiKey, slot);
-                totalPlaced += itemToPlace.getAmount();
-                if (consumeOnPlace) {
-                    topInventory.setItem(slot, null);
-                    player.sendMessage("Item '" + itemName + "' has been consumed in slot " + slot + ".");
-                } else {
-                    topInventory.setItem(slot, itemToPlace);
-                }
+                topInventory.setItem(slot, draggedItem);
             }
-        }
-
-        if (invalidPlacement) {
-            event.setCancelled(true);
-            for (int slot : slotItems.keySet()) {
-                if (slot < topInventory.getSize()) {
-                    topInventory.setItem(slot, null);
-                }
-            }
-            player.sendMessage("You cannot place '" + itemName + "' in some of the selected slots.");
-            return;
-        }
-
-        if (totalPlaced > 0) {
-            int newAmount = draggedItem.getAmount() - totalPlaced;
-            ItemStack newCursorItem = (newAmount > 0)
-                    ? new ItemStack(draggedItem.getType(), newAmount)
-                    : null;
-
-            Bukkit.getScheduler().runTask(JavaPlugin.getPlugin(Harambefd.class), () ->
-                    player.setItemOnCursor(newCursorItem)
-            );
         }
 
         event.setCancelled(true);
