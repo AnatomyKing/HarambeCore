@@ -3,7 +3,6 @@ package net.anatomyworld.harambefd.guieventlistener;
 import net.anatomyworld.harambefd.EconomyHandler;
 import net.anatomyworld.harambefd.GuiBuilder;
 import net.anatomyworld.harambefd.harambemethods.ItemRegistry;
-import net.anatomyworld.harambefd.guieventlistener.ItemAmountValidator;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
@@ -13,9 +12,6 @@ import java.util.List;
 
 public class GuiUtils {
 
-    private GuiUtils() {
-        // Utility class; prevent instantiation.
-    }
 
     /**
      * Handles consuming items in a slot.
@@ -39,6 +35,22 @@ public class GuiUtils {
             GuiBuilder guiBuilder,
             ItemRegistry itemRegistry
     ) {
+        // Check if the item is registered
+        if (!itemRegistry.isItemRegistered(itemStack)) {
+            player.sendMessage("This item is not registered and cannot be consumed.");
+            event.setCancelled(true);
+            return;
+        }
+
+        // Retrieve item tag for validation
+        String itemTag = itemRegistry.getItemTag(itemStack);
+        if (itemTag == null || itemTag.isEmpty()) {
+            player.sendMessage("This item has no valid tag and cannot be consumed.");
+            event.setCancelled(true);
+            return;
+        }
+
+        // Get slot limits
         int maxAmount = guiBuilder.getItemAmountForSlot(guiKey, slot);
         int currentTotal = ItemAmountValidator.getTotalItemCount(inventory, List.of(slot));
 
@@ -48,28 +60,47 @@ public class GuiUtils {
             return;
         }
 
+        // Handle economy payments
         double payAmount = guiBuilder.getSlotPayMap(guiKey).getOrDefault(slot, 0.0D);
-        if (payAmount > 0.0D) {
-            if (!EconomyHandler.hasEnoughBalance(player, payAmount)) {
-                player.sendMessage("You don't have enough balance to perform this action.");
-                event.setCancelled(true);
-                return;
-            }
-            EconomyHandler.withdrawBalance(player, payAmount);
+        if (!handleEconomy(player, payAmount)) {
+            event.setCancelled(true);
+            return;
         }
 
-        // Consume the item and clear the slot.
-        itemStack.setAmount(0);
-        inventory.setItem(slot, null);
-        player.sendMessage("Item '" + itemRegistry.getItemTag(itemStack) + "' has been consumed.");
+        // Determine how much to consume
+        int toConsume = Math.min(itemStack.getAmount(), maxAmount - currentTotal);
+        currentTotal += toConsume;
+
+        // Update item amount and clear slot if consumed fully
+        itemStack.setAmount(itemStack.getAmount() - toConsume);
+        if (itemStack.getAmount() == 0) {
+            inventory.setItem(slot, null);
+        }
+
+        player.sendMessage("Consumed " + toConsume + " items of type: " + itemTag + ". Current total: " + currentTotal + "/" + maxAmount);
+        event.setCancelled(true);
     }
 
     /**
-     * Determines if a slot is a special slot based on its button key.
+     * Handles economy payments.
      *
-     * @param buttonKey The button key to check.
-     * @return True if the slot is special, false otherwise.
+     * @param player    The player interacting with the GUI.
+     * @param payAmount The amount to be deducted from the player's balance.
+     * @return True if the player had enough balance and the transaction succeeded, false otherwise.
      */
+    private static boolean handleEconomy(Player player, double payAmount) {
+        if (payAmount <= 0.0D) return true;
+
+        if (!EconomyHandler.hasEnoughBalance(player, payAmount)) {
+            player.sendMessage("You don't have enough balance to perform this action.");
+            return false;
+        }
+
+        EconomyHandler.withdrawBalance(player, payAmount);
+        player.sendMessage("Paid " + payAmount + " for this action.");
+        return true;
+    }
+
     public static boolean isSpecialSlot(String buttonKey) {
         return buttonKey.endsWith("_slot");
     }

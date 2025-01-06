@@ -137,32 +137,33 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
 
     private boolean handleGiveCommand(Player player, String[] args) {
         if (args.length < 4) {
-            player.sendMessage("Usage: /harambe give <item|reward> <player> <submit_item_name> <reward_name> [amount]");
+            player.sendMessage("Usage: /harambe give <item|reward> <player> <submit_item_name> [reward_name] [amount]");
             return true;
         }
 
+        String type = args[1].toLowerCase();
         Player targetPlayer = Bukkit.getPlayer(args[2]);
+
         if (targetPlayer == null) {
             player.sendMessage("Player not found!");
             return true;
         }
 
         String submitItemTag = args[3].toLowerCase();
-        String rewardName = args[4].toLowerCase();
-        int amount = 1;
+        int amount = 1; // Default amount
 
-        // Check if an amount is provided and try to parse it
-        if (args.length == 6) {
-            try {
-                amount = Integer.parseInt(args[5]);
-            } catch (NumberFormatException e) {
-                player.sendMessage("Invalid amount, must be a number.");
-                return true;
-            }
-        }
-
-        switch (args[1].toLowerCase()) {
+        switch (type) {
             case "item":
+                // For /harambe give item <player> <itemname> [amount]
+                if (args.length >= 5) {
+                    try {
+                        amount = Integer.parseInt(args[4]);
+                    } catch (NumberFormatException e) {
+                        player.sendMessage("Invalid amount, must be a number.");
+                        return true;
+                    }
+                }
+
                 ItemStack item = itemRegistry.generateItem(submitItemTag);
                 if (item != null) {
                     item.setAmount(amount);
@@ -175,6 +176,23 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
                 return true;
 
             case "reward":
+                // For /harambe give reward <player> <itemname> <rewardname> [amount]
+                if (args.length < 5) {
+                    player.sendMessage("Usage: /harambe give reward <player> <submit_item_name> <reward_name> [amount]");
+                    return true;
+                }
+
+                String rewardName = args[4].toLowerCase();
+
+                if (args.length >= 6) {
+                    try {
+                        amount = Integer.parseInt(args[5]);
+                    } catch (NumberFormatException e) {
+                        player.sendMessage("Invalid amount, must be a number.");
+                        return true;
+                    }
+                }
+
                 ItemStack rewardItem = itemRegistry.loadRewardItem(submitItemTag, rewardName);
                 if (rewardItem != null) {
                     rewardItem.setAmount(amount);
@@ -187,7 +205,7 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
                 return true;
 
             default:
-                player.sendMessage("Invalid sub-command. Use: /harambe give <item|reward> <player> <item_name>");
+                player.sendMessage("Invalid sub-command. Use: /harambe give <item|reward> <player> <submit_item_name> [reward_name] [amount]");
                 return true;
         }
     }
@@ -202,25 +220,43 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
                 completions.addAll(Arrays.asList(
                         "set", "reload", "give", "krobus", "spawn", "interface", "enderlink"
                 ));
-            } else if (args[0].equalsIgnoreCase("set")) {
-                if (args.length == 2) {
+            } else if (args.length == 2) {
+                String firstArg = args[0].toLowerCase();
+                if (firstArg.equals("set")) {
                     completions.addAll(Arrays.asList("item", "reward"));
-                } else if (args.length == 3) {
-                    completions.add("<item_name>");
-                } else if (args.length == 4 && args[1].equalsIgnoreCase("reward")) {
-                    completions.add("<reward_name>");
+                } else if (firstArg.equals("give")) {
+                    completions.addAll(Arrays.asList("item", "reward"));
                 }
-            } else if (args[0].equalsIgnoreCase("give")) {
-                if (args.length == 2) {
-                    completions.addAll(Arrays.asList("item", "reward"));
-                } else if (args.length == 3) {
-                    completions.addAll(Bukkit.getOnlinePlayers().stream().map(Player::getName).collect(Collectors.toList()));
-                } else if (args.length == 4) {
-                    completions.add("<submit_item_name>");
-                } else if (args.length == 5) {
-                    completions.add("<reward_name>");
-                } else if (args.length == 6) {
-                    completions.add("<amount>");
+            } else if (args.length >= 3) {
+                String firstArg = args[0].toLowerCase();
+                String secondArg = args[1].toLowerCase();
+
+                if (firstArg.equals("set")) {
+                    if (secondArg.equals("item") && args.length == 3) {
+                        completions.add("<item_name>");
+                    } else if (secondArg.equals("reward") && args.length == 4) {
+                        completions.add("<reward_name>");
+                    }
+                } else if (firstArg.equals("give")) {
+                    if (secondArg.equals("item")) {
+                        if (args.length == 3) {
+                            completions.addAll(Bukkit.getOnlinePlayers().stream().map(Player::getName).collect(Collectors.toList()));
+                        } else if (args.length == 4) {
+                            completions.add("<submit_item_name>");
+                        } else if (args.length == 5) {
+                            completions.add("<amount>");
+                        }
+                    } else if (secondArg.equals("reward")) {
+                        if (args.length == 3) {
+                            completions.addAll(Bukkit.getOnlinePlayers().stream().map(Player::getName).collect(Collectors.toList()));
+                        } else if (args.length == 4) {
+                            completions.add("<submit_item_name>");
+                        } else if (args.length == 5) {
+                            completions.add("<reward_name>");
+                        } else if (args.length == 6) {
+                            completions.add("<amount>");
+                        }
+                    }
                 }
             }
         }
