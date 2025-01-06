@@ -150,55 +150,58 @@ public class GuiEventListener implements Listener {
         String guiKey = guiBuilder.getGuiKeyByInventory(player, topInventory);
         if (guiKey == null) return;
 
-        // Get button/filler slots for the GUI, if any
+        // ============ BUTTON/FILLER SLOT LOGIC ============
+        // Apply to all GUIs
         Map<Integer, String> buttonKeyMap = guiBuilder.getButtonKeyMap(guiKey);
+        if (buttonKeyMap != null) {
+            for (int rawSlot : event.getRawSlots()) {
+                // Cancel if dragging over a button or filler slot
+                if (rawSlot >= 0 && rawSlot < topInventory.getSize() && buttonKeyMap.containsKey(rawSlot)) {
+                    event.setCancelled(true);
+                    player.sendMessage("Dragging items into restricted slots is not allowed.");
+                    return;
+                }
+            }
+        }
 
+        // =========== ITEM VALIDATION FOR SPECIFIC SLOTS ===========
         Map<Integer, ItemStack> slotItems = event.getNewItems();
 
         for (Map.Entry<Integer, ItemStack> entry : slotItems.entrySet()) {
             int slot = entry.getKey();
             ItemStack draggedItem = entry.getValue();
 
-            // Ensure the slot is within bounds
-            if (slot >= topInventory.getSize()) {
-                event.setCancelled(true);
-                return;
-            }
-
-            // Cancel if dragging over a button or filler slot
-            if (buttonKeyMap != null && buttonKeyMap.containsKey(slot)) {
-                event.setCancelled(true);
-                return;
-            }
-
-            // Validate dragged item
-            if (draggedItem == null || !itemRegistry.isItemRegistered(draggedItem)) {
-                event.setCancelled(true);
-                player.sendMessage("Only registered items can be placed in this GUI.");
-                return;
-            }
-
-            String itemName = itemRegistry.getItemTag(draggedItem);
+            // Retrieve the required item name for this slot, if any
             String requiredItemName = guiBuilder.getItemNameForSlot(guiKey, slot);
 
-            // Check if the item matches the required name
-            if (requiredItemName == null || !requiredItemName.equals(itemName)) {
-                event.setCancelled(true);
-                player.sendMessage("You cannot place '" + itemName + "' in slot " + slot + ".");
-                return;
-            }
+            // Only perform validation if the slot has a specific item requirement
+            if (requiredItemName != null) {
+                // Validate dragged item
+                if (draggedItem == null || !itemRegistry.isItemRegistered(draggedItem)) {
+                    event.setCancelled(true);
+                    player.sendMessage("Only registered items can be placed in this GUI.");
+                    return;
+                }
 
-            boolean consumeOnPlace = guiBuilder.shouldConsumeOnPlace(guiKey, slot);
-            if (consumeOnPlace) {
-                topInventory.setItem(slot, null);
-                player.sendMessage("Item '" + itemName + "' has been consumed in slot " + slot + ".");
-            } else {
-                topInventory.setItem(slot, draggedItem);
+                String itemName = itemRegistry.getItemTag(draggedItem);
+
+                // Check if the item matches the required name for the slot
+                if (!requiredItemName.equals(itemName)) {
+                    event.setCancelled(true);
+                    player.sendMessage("You cannot place '" + itemName + "' in slot " + slot + ".");
+                    return;
+                }
+
+                // Optionally, handle item consumption elsewhere (e.g., in InventoryClickEvent)
+                // to keep the drag event focused on validation
             }
+            // For regular slots (requiredItemName == null), no validation is needed
         }
 
-        event.setCancelled(true);
+        // If all validations pass, allow the drag to proceed
+        // No need to cancel the event here
     }
+
 
     private void handleCustomGuiClick(InventoryClickEvent event, Player player, String guiKey) {
         ItemStack clickedItem = event.getCurrentItem();
