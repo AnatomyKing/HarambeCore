@@ -8,11 +8,11 @@ import java.util.List;
 public class ItemAmountValidator {
 
   /**
-   * Calculates the total number of items present in the specified slots of the inventory.
+   * Calculates the total amount of items in the specified slots of the inventory.
    *
-   * @param inventory The inventory to scan.
-   * @param slots     The list of slot indices to check.
-   * @return The total count of items in the specified slots.
+   * @param inventory The inventory to check.
+   * @param slots     The slots to calculate the total item count for.
+   * @return The total number of items in the specified slots.
    */
   public static int getTotalItemCount(Inventory inventory, List<Integer> slots) {
     int total = 0;
@@ -26,82 +26,45 @@ public class ItemAmountValidator {
   }
 
   /**
-   * Distributes items across the specified slots in the inventory, respecting the maximum allowed amount.
+   * Distributes items into the specified slots of the inventory.
    *
-   * @param inventory       The inventory where the items will be distributed.
-   * @param item            The item to distribute.
-   * @param slots           The list of slots where the items can be placed.
-   * @param maxAmount       The maximum number of items allowed per slot.
-   * @param totalMaxAmount  The cumulative maximum number of items across all slots.
-   * @param requiredItemTag The required item tag to validate item placement.
-   * @param consumeOnPlace  Whether items should be consumed during placement.
-   * @return The remaining amount of the item after distribution.
+   * @param inventory The inventory to distribute items into.
+   * @param item      The item to distribute.
+   * @param slots     The slots to distribute items into.
+   * @param maxAmount The maximum amount of items allowed per slot.
    */
-  public static int distributeItems(
-          Inventory inventory,
-          ItemStack item,
-          List<Integer> slots,
-          int maxAmount,
-          int totalMaxAmount,
-          String requiredItemTag,
-          boolean consumeOnPlace
-  ) {
+  public static void distributeItems(Inventory inventory, ItemStack item, List<Integer> slots, int maxAmount) {
     int remaining = item.getAmount();
 
-    // Check the total current item count in all slots
-    int currentTotal = getTotalItemCount(inventory, slots);
-    if (currentTotal >= totalMaxAmount) {
-      return remaining; // Inventory is already full
-    }
-
     for (int slot : slots) {
-      if (remaining <= 0) break;
+      if (remaining <= 0) {
+        break;
+      }
 
       ItemStack slotItem = inventory.getItem(slot);
 
-      // Validate required item tag
-      if (requiredItemTag != null && !requiredItemTag.isEmpty()) {
-        if (slotItem != null && !requiredItemTag.equals(slotItem.getType().name())) {
-          continue; // Skip invalid items
-        }
-      }
-
-      // If slot is empty or has valid items
       if (slotItem == null || slotItem.getType().isAir()) {
+        // Place items in an empty or air slot
         int toPlace = Math.min(remaining, maxAmount);
-        int cumulativeSpace = totalMaxAmount - currentTotal;
-
-        if (cumulativeSpace <= 0) break; // No space left in the overall slots
-        toPlace = Math.min(toPlace, cumulativeSpace);
 
         ItemStack newItem = item.clone();
         newItem.setAmount(toPlace);
         inventory.setItem(slot, newItem);
-        remaining -= toPlace;
-        currentTotal += toPlace;
 
-        if (consumeOnPlace) {
-          item.setAmount(item.getAmount() - toPlace);
-        }
+        remaining -= toPlace;
 
       } else if (slotItem.isSimilar(item)) {
+        // Add to existing similar item stacks
         int availableSpace = maxAmount - slotItem.getAmount();
-        int cumulativeSpace = totalMaxAmount - currentTotal;
+        int toPlace = Math.min(remaining, availableSpace);
 
-        if (availableSpace > 0 && cumulativeSpace > 0) {
-          int toPlace = Math.min(remaining, Math.min(availableSpace, cumulativeSpace));
+        if (toPlace > 0) {
           slotItem.setAmount(slotItem.getAmount() + toPlace);
           remaining -= toPlace;
-          currentTotal += toPlace;
-
-          if (consumeOnPlace) {
-            item.setAmount(item.getAmount() - toPlace);
-          }
         }
       }
     }
 
-    item.setAmount(remaining);
-    return remaining;
+    item.setAmount(remaining); // Update the original item stack's remaining amount
   }
 }

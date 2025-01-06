@@ -119,7 +119,8 @@ public class Harambefd extends JavaPlugin implements Listener {
 
     // Register the GUI Event Listener separately
     private void registerGuiEventListener() {
-        new GuiEventListener(guiBuilder, itemRegistry, this);
+        GuiEventListener guiEventListener = new GuiEventListener(guiBuilder, itemRegistry);
+        getServer().getPluginManager().registerEvents(guiEventListener, this);
     }
-
 }
+
