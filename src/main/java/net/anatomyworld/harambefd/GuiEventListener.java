@@ -150,22 +150,9 @@ public class GuiEventListener implements Listener {
         String guiKey = guiBuilder.getGuiKeyByInventory(player, topInventory);
         if (guiKey == null) return;
 
-        // ============ ENDERLINK LOGIC ============
-        if ("enderlink".equalsIgnoreCase(guiKey)) {
-            Map<Integer, String> buttonKeyMap = guiBuilder.getButtonKeyMap(guiKey);
-            if (buttonKeyMap != null) {
-                for (int rawSlot : event.getRawSlots()) {
-                    // Cancel if dragging over a button or filler slot
-                    if (rawSlot >= 0 && rawSlot < topInventory.getSize() && buttonKeyMap.containsKey(rawSlot)) {
-                        event.setCancelled(true);
-                        return;
-                    }
-                }
-            }
-            return; // Allow normal drag for other slots
-        }
+        // Get button/filler slots for the GUI, if any
+        Map<Integer, String> buttonKeyMap = guiBuilder.getButtonKeyMap(guiKey);
 
-        // =========== NON-ENDERLINK GUIs ===========
         Map<Integer, ItemStack> slotItems = event.getNewItems();
 
         for (Map.Entry<Integer, ItemStack> entry : slotItems.entrySet()) {
@@ -174,6 +161,12 @@ public class GuiEventListener implements Listener {
 
             // Ensure the slot is within bounds
             if (slot >= topInventory.getSize()) {
+                event.setCancelled(true);
+                return;
+            }
+
+            // Cancel if dragging over a button or filler slot
+            if (buttonKeyMap != null && buttonKeyMap.containsKey(slot)) {
                 event.setCancelled(true);
                 return;
             }
