@@ -37,9 +37,53 @@ public class ItemAmountValidator {
     int remaining = item.getAmount();
 
     for (int slot : slots) {
-      if (remaining <= 0) {
-        break;
+      if (remaining <= 0) break;
+
+      ItemStack slotItem = inventory.getItem(slot);
+
+      if (slotItem == null || slotItem.getType().isAir()) {
+        // Place items in an empty or air slot
+        int toPlace = Math.min(remaining, maxAmount);
+
+        ItemStack newItem = item.clone();
+        newItem.setAmount(toPlace);
+        inventory.setItem(slot, newItem);
+
+        remaining -= toPlace;
+
+      } else if (slotItem.isSimilar(item)) {
+        // Add to existing similar item stacks
+        int availableSpace = maxAmount - slotItem.getAmount();
+        int toPlace = Math.min(remaining, availableSpace);
+
+        if (toPlace > 0) {
+          slotItem.setAmount(slotItem.getAmount() + toPlace);
+          remaining -= toPlace;
+        }
       }
+    }
+
+    item.setAmount(remaining); // Update the original item stack's remaining amount
+  }
+
+  /**
+   * Distributes items into the specified slots of the inventory, treating the slots as a group.
+   *
+   * @param inventory The inventory to distribute items into.
+   * @param item      The item to distribute.
+   * @param slots     The slots to distribute items into.
+   * @param maxAmount The maximum amount of items allowed across all slots in the group.
+   */
+  public static void distributeItemsGrouped(Inventory inventory, ItemStack item, List<Integer> slots, int maxAmount) {
+    int remaining = item.getAmount();
+    int currentTotal = getTotalItemCount(inventory, slots);
+
+    if (currentTotal + remaining > maxAmount) {
+      remaining = maxAmount - currentTotal; // Adjust remaining to fit within the group limit
+    }
+
+    for (int slot : slots) {
+      if (remaining <= 0) break;
 
       ItemStack slotItem = inventory.getItem(slot);
 

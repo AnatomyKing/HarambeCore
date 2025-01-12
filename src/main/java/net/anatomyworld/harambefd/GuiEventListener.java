@@ -13,9 +13,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class GuiEventListener implements Listener {
 
@@ -150,57 +148,92 @@ public class GuiEventListener implements Listener {
         String guiKey = guiBuilder.getGuiKeyByInventory(player, topInventory);
         if (guiKey == null) return;
 
-        // ============ BUTTON/FILLER SLOT LOGIC ============
-        // Apply to all GUIs
+        // Map of slots and their required item names for this GUI
         Map<Integer, String> buttonKeyMap = guiBuilder.getButtonKeyMap(guiKey);
-        if (buttonKeyMap != null) {
-            for (int rawSlot : event.getRawSlots()) {
-                // Cancel if dragging over a button or filler slot
-                if (rawSlot >= 0 && rawSlot < topInventory.getSize() && buttonKeyMap.containsKey(rawSlot)) {
-                    event.setCancelled(true);
-                    player.sendMessage("Dragging items into restricted slots is not allowed.");
-                    return;
-                }
-            }
-        }
+        Map<Integer, ItemStack> newItems = event.getNewItems();
 
-        // =========== ITEM VALIDATION FOR SPECIFIC SLOTS ===========
-        Map<Integer, ItemStack> slotItems = event.getNewItems();
+        // Cache for group processing to avoid repeated checks
+        Set<List<Integer>> processedGroups = new HashSet<>();
 
-        for (Map.Entry<Integer, ItemStack> entry : slotItems.entrySet()) {
+        for (Map.Entry<Integer, ItemStack> entry : newItems.entrySet()) {
             int slot = entry.getKey();
             ItemStack draggedItem = entry.getValue();
 
-            // Retrieve the required item name for this slot, if any
+            // Check if this is a special slot with an item requirement
             String requiredItemName = guiBuilder.getItemNameForSlot(guiKey, slot);
 
-            // Only perform validation if the slot has a specific item requirement
             if (requiredItemName != null) {
-                // Validate dragged item
+                // This is a restricted/special slot
                 if (draggedItem == null || !itemRegistry.isItemRegistered(draggedItem)) {
                     event.setCancelled(true);
-                    player.sendMessage("Only registered items can be placed in this GUI.");
+                    player.sendMessage("Only registered items can be placed in this slot.");
                     return;
                 }
 
                 String itemName = itemRegistry.getItemTag(draggedItem);
 
-                // Check if the item matches the required name for the slot
                 if (!requiredItemName.equals(itemName)) {
                     event.setCancelled(true);
                     player.sendMessage("You cannot place '" + itemName + "' in slot " + slot + ".");
                     return;
                 }
 
-                // Optionally, handle item consumption elsewhere (e.g., in InventoryClickEvent)
-                // to keep the drag event focused on validation
+                // Check if the slot belongs to a group and process it
+                List<Integer> groupSlots = guiBuilder.getSlotsForButton(guiKey, buttonKeyMap.get(slot));
+                if (!groupSlots.isEmpty() && !processedGroups.contains(groupSlots)) {
+                    processedGroups.add(groupSlots); // Avoid re-checking the same group
+
+                    int totalItemCount = ItemAmountValidator.getTotalItemCount(topInventory, groupSlots);
+                    int maxAmount = guiBuilder.getItemAmountForSlot(guiKey, slot);
+
+                    if (totalItemCount + draggedItem.getAmount() > maxAmount) {
+                        event.setCancelled(true);
+                        player.sendMessage("You cannot place more than " + maxAmount + " items in this slot group.");
+                        return;
+                    }
+
+                    // Distribute items across the group
+                    ItemAmountValidator.distributeItemsGrouped(topInventory, draggedItem, groupSlots, maxAmount);
+
+                    // Cancel the drag event to prevent duplication issues
+                    event.setCancelled(true);
+                    return;
+                }
+
+                // Handle consumption if applicable
+                boolean consumeOnDrag = guiBuilder.shouldConsumeOnPlace(guiKey, slot);
+                if (consumeOnDrag) {
+                    event.setCancelled(true);
+
+                    // Simulate a click event to handle consumption logic
+                    InventoryClickEvent fakeClickEvent = new InventoryClickEvent(
+                            event.getView(), InventoryType.SlotType.CONTAINER, slot, ClickType.LEFT, InventoryAction.PLACE_ALL
+                    );
+                    handleCustomGuiClick(fakeClickEvent, player, guiKey);
+
+                    if (fakeClickEvent.isCancelled()) {
+                        return;
+                    }
+
+                    // Clear or reduce the dragged item on the cursor
+                    Bukkit.getScheduler().runTask(JavaPlugin.getPlugin(Harambefd.class), () -> {
+                        ItemStack cursor = player.getItemOnCursor();
+                        if (cursor != null && cursor.isSimilar(draggedItem)) {
+                            cursor.setAmount(Math.max(0, cursor.getAmount() - draggedItem.getAmount()));
+                            if (cursor.getAmount() == 0) {
+                                player.setItemOnCursor(null); // Clear the cursor if no items remain
+                            }
+                        }
+                    });
+                    return;
+                }
             }
-            // For regular slots (requiredItemName == null), no validation is needed
+            // No restrictions for non-special slots
         }
 
-        // If all validations pass, allow the drag to proceed
-        // No need to cancel the event here
+        // If all validations pass, allow the drag
     }
+
 
 
     private void handleCustomGuiClick(InventoryClickEvent event, Player player, String guiKey) {
