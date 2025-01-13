@@ -2,6 +2,7 @@ package net.anatomyworld.harambefd;
 
 import net.anatomyworld.harambefd.harambemethods.ItemRegistry;
 import net.anatomyworld.harambefd.guis.enderlink.EnderlinkMethods;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -9,6 +10,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.*;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.*;
 
@@ -40,9 +42,18 @@ public class GuiEventListener implements Listener {
         // Get the slot that was clicked
         int slot = event.getSlot();
 
+        // Handle shift-clicks or number key actions
+        if (event.isShiftClick() || event.getAction() == InventoryAction.HOTBAR_SWAP) {
+            event.setCancelled(true);
+            player.sendMessage("Shift-clicks and hotbar swaps are not allowed in this GUI.");
+            return;
+        }
+
         // Block invalid actions using the generalized method
         if (validateAndBlock(event, player, guiKey, slot)) {
-            return; // Stop further processing if the action is blocked
+            event.setCancelled(true); // Ensure the action is blocked
+            Bukkit.getScheduler().runTask(JavaPlugin.getPlugin(Harambefd.class), player::updateInventory); // Sync inventory
+            return; // Stop further processing
         }
 
         // Additional logic for valid interactions can go here
@@ -55,16 +66,21 @@ public class GuiEventListener implements Listener {
 
         // Check if the slot is a special slot
         if (isSpecialSlot(buttonKey)) {
-            // Get the item on the cursor
-            ItemStack cursorItem = event.getCursor();
-
-
-            // Validate the item against the required name for the slot
+            ItemStack cursorItem = event.getCursor(); // Item being placed
+            ItemStack slotItem = event.getCurrentItem(); // Item currently in the slot
             String requiredItemName = guiBuilder.getItemNameForSlot(guiKey, slot);
-            if (!requiredItemName.equals(itemRegistry.getItemTag(cursorItem))) {
-                event.setCancelled(true);
+
+            // Block invalid items on the cursor
+            if (cursorItem != null && !cursorItem.getType().isAir() &&
+                    !requiredItemName.equals(itemRegistry.getItemTag(cursorItem))) {
                 player.sendMessage("You can only place '" + requiredItemName + "' in this slot.");
-                player.updateInventory(); // Sync client inventory state
+                return true; // Blocked
+            }
+
+            // Block invalid interactions with items in the slot
+            if (slotItem != null && !slotItem.getType().isAir() &&
+                    !requiredItemName.equals(itemRegistry.getItemTag(slotItem))) {
+                player.sendMessage("You cannot interact with invalid items in this slot.");
                 return true; // Blocked
             }
         }
