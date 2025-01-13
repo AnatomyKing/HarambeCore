@@ -28,6 +28,7 @@ public class GuiEventListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
+
         Inventory topInventory = event.getView().getTopInventory();
         Inventory clickedInventory = event.getClickedInventory();
 
@@ -60,17 +61,27 @@ public class GuiEventListener implements Listener {
         if (event.getAction() == InventoryAction.MOVE_TO_OTHER_INVENTORY) {
             ItemStack shiftClickedItem = event.getCurrentItem();
             if (shiftClickedItem != null) {
+                // Check if item is registered
                 if (!itemRegistry.isItemRegistered(shiftClickedItem)) {
                     event.setCancelled(true);
                     player.sendMessage("Only registered items can be shift-clicked into this GUI.");
                     return;
                 }
 
+                // We MUST ensure the item_name matches the slots' required item_name
                 String itemName = itemRegistry.getItemTag(shiftClickedItem);
-                List<Integer> allowedSlots = guiBuilder.getAllowedSlots(guiKey, itemName);
-                int maxAmountPerSlot = guiBuilder.getItemAmountForSlot(guiKey, allowedSlots.get(0)); // Assuming uniform maxAmount
 
-                // Validate the total item count in allowed slots before distributing
+                // Retrieve all slots that allow THIS specific item
+                List<Integer> allowedSlots = guiBuilder.getAllowedSlots(guiKey, itemName);
+                if (allowedSlots.isEmpty()) {
+                    // No slot actually allows this item_name
+                    event.setCancelled(true);
+                    player.sendMessage("No slot in this GUI accepts that item.");
+                    return;
+                }
+
+                int maxAmountPerSlot = guiBuilder.getItemAmountForSlot(guiKey, allowedSlots.get(0)); // Assuming uniform
+                // Validate the total item count in these allowed slots before distributing
                 int currentTotal = ItemAmountValidator.getTotalItemCount(topInventory, allowedSlots);
                 int maxTotal = allowedSlots.size() * maxAmountPerSlot;
 
@@ -80,10 +91,10 @@ public class GuiEventListener implements Listener {
                     return;
                 }
 
-                // Use ItemAmountValidator to distribute items
-                ItemAmountValidator.distributeItems(topInventory, shiftClickedItem, allowedSlots, maxAmountPerSlot);
+                // Use our updated distributeItems method with itemName
+                ItemAmountValidator.distributeItems(topInventory, shiftClickedItem, allowedSlots, maxAmountPerSlot, itemName, itemRegistry);
 
-                // Clear the item from the cursor if fully distributed
+                // If the entire stack was placed, remove from the original slot
                 if (shiftClickedItem.getAmount() <= 0) {
                     event.setCurrentItem(null);
                 }
@@ -101,21 +112,44 @@ public class GuiEventListener implements Listener {
                     int slot = event.getSlot();
 
                     // Check if the cursor item is registered
-                    if (cursorItem != null && !itemRegistry.isItemRegistered(cursorItem)) {
-                        event.setCancelled(true);
-                        player.sendMessage("Only registered items can be placed here.");
-                        return;
+                    if (cursorItem != null && !cursorItem.getType().isAir()) {
+                        if (!itemRegistry.isItemRegistered(cursorItem)) {
+                            event.setCancelled(true);
+                            player.sendMessage("Only registered items can be placed here.");
+                            return;
+                        }
                     }
 
-                    // Get the max allowed amount for this slot
-                    int maxAmount = guiBuilder.getItemAmountForSlot(guiKey, slot);
-                    List<Integer> singleSlot = List.of(slot);
-                    ItemAmountValidator.distributeItems(topInventory, cursorItem, singleSlot, maxAmount);
+                    // Determine required item name for this slot, if any
+                    String requiredItemName = guiBuilder.getItemNameForSlot(guiKey, slot);
+                    if (requiredItemName != null && !requiredItemName.isEmpty()) {
+                        // If the slot requires a specific item, ensure it matches
+                        if (cursorItem != null && !cursorItem.getType().isAir()) {
+                            String cursorItemName = itemRegistry.getItemTag(cursorItem);
+                            if (!requiredItemName.equals(cursorItemName)) {
+                                event.setCancelled(true);
+                                player.sendMessage("You can only place the item '" + requiredItemName + "' in this slot.");
+                                return;
+                            }
+                        }
+                    } else {
+                        // If there's no required item name, optionally just let any registered item place
+                        // Or if you want to fully restrict to item_name only, handle accordingly
+                    }
 
-                    // Update the cursor with the remaining items
-                    int remainingAmount = cursorItem.getAmount();
+                    int maxAmount = guiBuilder.getItemAmountForSlot(guiKey, slot);
+                    List<Integer> singleSlot = Collections.singletonList(slot);
+
+                    // Use new distributeItems with the required item name (if any)
+                    String itemName = (cursorItem != null && !cursorItem.getType().isAir())
+                            ? itemRegistry.getItemTag(cursorItem)
+                            : "";
+                    ItemAmountValidator.distributeItems(topInventory, cursorItem, singleSlot, maxAmount, itemName, itemRegistry);
+
+                    // Update the cursor with the remaining items after distribution
+                    int remainingAmount = (cursorItem != null) ? cursorItem.getAmount() : 0;
                     Bukkit.getScheduler().runTask(JavaPlugin.getPlugin(Harambefd.class), () -> {
-                        if (remainingAmount > 0) {
+                        if (remainingAmount > 0 && cursorItem != null) {
                             cursorItem.setAmount(remainingAmount);
                         } else {
                             player.setItemOnCursor(null); // Clear the cursor
@@ -134,9 +168,12 @@ public class GuiEventListener implements Listener {
                 return;
             }
 
+            // Handle custom logic (buttons, consumption, etc.)
             handleCustomGuiClick(event, player, guiKey);
         }
     }
+
+    // =========== DRAG HANDLING ===========
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onInventoryDrag(InventoryDragEvent event) {
@@ -148,87 +185,88 @@ public class GuiEventListener implements Listener {
         String guiKey = guiBuilder.getGuiKeyByInventory(player, topInventory);
         if (guiKey == null) return;
 
-        // Map of slots and their required item names for this GUI
         Map<Integer, String> buttonKeyMap = guiBuilder.getButtonKeyMap(guiKey);
         Map<Integer, ItemStack> newItems = event.getNewItems();
 
-        // Cache for group processing to avoid repeated checks
+        // We track groups so we don't re-distribute multiple times
         Set<List<Integer>> processedGroups = new HashSet<>();
 
         for (Map.Entry<Integer, ItemStack> entry : newItems.entrySet()) {
             int slot = entry.getKey();
             ItemStack draggedItem = entry.getValue();
 
-            // Check if this is a special slot with an item requirement
+            // If no item is dragged, skip
+            if (draggedItem == null || draggedItem.getType().isAir()) continue;
+
+            // Must be a registered item and match the slot's required item name
+            if (!itemRegistry.isItemRegistered(draggedItem)) {
+                event.setCancelled(true);
+                player.sendMessage("Only registered items can be placed in this slot.");
+                return;
+            }
+            String draggedItemName = itemRegistry.getItemTag(draggedItem);
+
             String requiredItemName = guiBuilder.getItemNameForSlot(guiKey, slot);
-
-            if (requiredItemName != null) {
-                // This is a restricted/special slot
-                if (draggedItem == null || !itemRegistry.isItemRegistered(draggedItem)) {
+            if (requiredItemName != null && !requiredItemName.isEmpty()) {
+                if (!requiredItemName.equals(draggedItemName)) {
                     event.setCancelled(true);
-                    player.sendMessage("Only registered items can be placed in this slot.");
+                    player.sendMessage("You cannot place '" + draggedItemName + "' in slot " + slot + ".");
                     return;
                 }
+            }
 
-                String itemName = itemRegistry.getItemTag(draggedItem);
-
-                if (!requiredItemName.equals(itemName)) {
-                    event.setCancelled(true);
-                    player.sendMessage("You cannot place '" + itemName + "' in slot " + slot + ".");
-                    return;
-                }
-
-                // Check if the slot belongs to a group and process it
-                List<Integer> groupSlots = guiBuilder.getSlotsForButton(guiKey, buttonKeyMap.get(slot));
+            // Check group logic
+            String buttonKey = (buttonKeyMap != null) ? buttonKeyMap.get(slot) : null;
+            if (buttonKey != null && !buttonKey.isEmpty()) {
+                List<Integer> groupSlots = guiBuilder.getSlotsForButton(guiKey, buttonKey);
                 if (!groupSlots.isEmpty() && !processedGroups.contains(groupSlots)) {
-                    processedGroups.add(groupSlots); // Avoid re-checking the same group
+                    processedGroups.add(groupSlots);
 
-                    int totalItemCount = ItemAmountValidator.getTotalItemCount(topInventory, groupSlots);
                     int maxAmount = guiBuilder.getItemAmountForSlot(guiKey, slot);
 
+                    // Compute how many items are currently in these group slots
+                    int totalItemCount = ItemAmountValidator.getTotalItemCount(topInventory, groupSlots);
                     if (totalItemCount + draggedItem.getAmount() > maxAmount) {
                         event.setCancelled(true);
                         player.sendMessage("You cannot place more than " + maxAmount + " items in this slot group.");
                         return;
                     }
 
-                    // Distribute items across the group
-                    ItemAmountValidator.distributeItemsGrouped(topInventory, draggedItem, groupSlots, maxAmount);
+                    // Distribute items across group
+                    ItemAmountValidator.distributeItemsGrouped(topInventory, draggedItem, groupSlots, maxAmount, draggedItemName, itemRegistry);
 
-                    // Cancel the drag event to prevent duplication issues
+                    // Cancel the drag to prevent duplication
                     event.setCancelled(true);
-                    return;
-                }
-
-                // Handle consumption if applicable
-                boolean consumeOnDrag = guiBuilder.shouldConsumeOnPlace(guiKey, slot);
-                if (consumeOnDrag) {
-                    event.setCancelled(true);
-
-                    // Simulate a click event to handle consumption logic
-                    InventoryClickEvent fakeClickEvent = new InventoryClickEvent(
-                            event.getView(), InventoryType.SlotType.CONTAINER, slot, ClickType.LEFT, InventoryAction.PLACE_ALL
-                    );
-                    handleCustomGuiClick(fakeClickEvent, player, guiKey);
-
-                    if (fakeClickEvent.isCancelled()) {
-                        return;
-                    }
-
-                    // Clear or reduce the dragged item on the cursor
-                    Bukkit.getScheduler().runTask(JavaPlugin.getPlugin(Harambefd.class), () -> {
-                        ItemStack cursor = player.getItemOnCursor();
-                        if (cursor != null && cursor.isSimilar(draggedItem)) {
-                            cursor.setAmount(Math.max(0, cursor.getAmount() - draggedItem.getAmount()));
-                            if (cursor.getAmount() == 0) {
-                                player.setItemOnCursor(null); // Clear the cursor if no items remain
-                            }
-                        }
-                    });
                     return;
                 }
             }
-            // No restrictions for non-special slots
+
+            // Handle consumption if applicable
+            boolean consumeOnDrag = guiBuilder.shouldConsumeOnPlace(guiKey, slot);
+            if (consumeOnDrag) {
+                event.setCancelled(true);
+
+                // Simulate a click event to handle consumption logic
+                InventoryClickEvent fakeClickEvent = new InventoryClickEvent(
+                        event.getView(), InventoryType.SlotType.CONTAINER, slot, ClickType.LEFT, InventoryAction.PLACE_ALL
+                );
+                handleCustomGuiClick(fakeClickEvent, player, guiKey);
+
+                if (fakeClickEvent.isCancelled()) {
+                    return;
+                }
+
+                // If it's a consume slot, remove the entire dragged amount from the player's cursor
+                Bukkit.getScheduler().runTask(JavaPlugin.getPlugin(Harambefd.class), () -> {
+                    ItemStack cursor = player.getItemOnCursor();
+                    // If the cursor is the same item, set amount to 0
+                    if (cursor != null && cursor.isSimilar(draggedItem)) {
+                        cursor.setAmount(0);
+                        player.setItemOnCursor(null);
+                    }
+                });
+                return;
+            }
         }
 
         // If all validations pass, allow the drag
