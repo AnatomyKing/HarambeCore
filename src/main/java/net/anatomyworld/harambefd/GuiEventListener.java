@@ -79,8 +79,9 @@ public class GuiEventListener implements Listener {
             if (isSpecialSlot(buttonKey)) {
                 String requiredItemName = guiBuilder.getItemNameForSlot(guiKey, slot);
 
-                if (!itemRegistry.isItemRegistered(draggedItem) || !requiredItemName.equals(itemName)) {
-                    player.sendMessage("You can only drag '" + requiredItemName + "' into this slot.");
+                // Null-check for requiredItemName
+                if (requiredItemName == null || !itemRegistry.isItemRegistered(draggedItem) || !requiredItemName.equals(itemName)) {
+                    player.sendMessage("You can only drag '" + (requiredItemName != null ? requiredItemName : "valid items") + "' into this slot.");
                     event.setCancelled(true); // Block the drag
                     returnDraggedItemToCursor(player, draggedItem);
                     return;
@@ -129,8 +130,10 @@ public class GuiEventListener implements Listener {
             if (cursorItem == null || cursorItem.getType().isAir()) return false;
 
             String requiredItemName = guiBuilder.getItemNameForSlot(guiKey, slot);
-            if (!requiredItemName.equals(itemRegistry.getItemTag(cursorItem))) {
-                player.sendMessage("You can only place '" + requiredItemName + "' in this slot.");
+
+            // Null-check to ensure requiredItemName is not null
+            if (requiredItemName == null || !requiredItemName.equals(itemRegistry.getItemTag(cursorItem))) {
+                player.sendMessage("You can only place '" + (requiredItemName != null ? requiredItemName : "valid items") + "' in this slot.");
                 returnDraggedItemToCursor(player, cursorItem);
                 return true; // Blocked
             }
