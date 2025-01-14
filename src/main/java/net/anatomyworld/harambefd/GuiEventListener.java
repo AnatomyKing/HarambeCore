@@ -29,69 +29,133 @@ public class GuiEventListener implements Listener {
         if (!(event.getWhoClicked() instanceof Player player)) return;
 
         // Get the inventories involved
-        Inventory topInventory = event.getView().getTopInventory();
-        Inventory clickedInventory = event.getClickedInventory();
+        Inventory topInventory = event.getView().getTopInventory(); // Custom GUI
+        Inventory clickedInventory = event.getClickedInventory();   // Source inventory
 
-        // Ensure the click is in the top inventory (custom GUI)
-        if (clickedInventory == null || !clickedInventory.equals(topInventory)) return;
+        // Ensure the click is in the player's inventory or the custom GUI
+        if (clickedInventory == null) return;
 
         // Check if the inventory is a custom GUI
         String guiKey = guiBuilder.getGuiKeyByInventory(player, topInventory);
-        if (guiKey == null) return;
+        if (guiKey == null) return; // Not a custom GUI
 
-        // Get the slot that was clicked
-        int slot = event.getSlot();
-
-        // Handle shift-clicks or number key actions
-        if (event.isShiftClick() || event.getAction() == InventoryAction.HOTBAR_SWAP) {
-            event.setCancelled(true);
-            player.sendMessage("Shift-clicks and hotbar swaps are not allowed in this GUI.");
-            return;
+        // Handle shift-clicks moving items into the custom GUI
+        if (event.getAction() == InventoryAction.MOVE_TO_OTHER_INVENTORY && clickedInventory != topInventory) {
+            if (handleShiftClick(event, player, guiKey, topInventory)) {
+                event.setCancelled(true); // Cancel the event if blocked
+                Bukkit.getScheduler().runTask(JavaPlugin.getPlugin(Harambefd.class), player::updateInventory); // Sync inventory
+                return;
+            }
         }
 
-        // Block invalid actions using the generalized method
-        if (validateAndBlock(event, player, guiKey, slot)) {
-            event.setCancelled(true); // Ensure the action is blocked
+        // Ensure the click is in the topInventory (custom GUI)
+        if (clickedInventory != topInventory) return;
+
+        // Handle direct placement
+        if (handleDirectPlacement(event, player, guiKey, topInventory)) {
+            event.setCancelled(true); // Cancel the event if blocked
             Bukkit.getScheduler().runTask(JavaPlugin.getPlugin(Harambefd.class), player::updateInventory); // Sync inventory
-            return; // Stop further processing
         }
-
-        // Additional logic for valid interactions can go here
     }
 
-    private boolean validateAndBlock(InventoryClickEvent event, Player player, String guiKey, int slot) {
+    private boolean handleShiftClick(InventoryClickEvent event, Player player, String guiKey, Inventory topInventory) {
+        ItemStack shiftClickedItem = event.getCurrentItem(); // Item being shift-clicked
+        if (shiftClickedItem == null || shiftClickedItem.getType().isAir()) return false;
+
+        // Retrieve item name (tag) for validation
+        String itemName = itemRegistry.getItemTag(shiftClickedItem);
+
+        // Allow unregistered items to move freely
+        if (!itemRegistry.isItemRegistered(shiftClickedItem)) {
+            return false; // Not blocked
+        }
+
+        // Get allowed slots for registered items in the custom GUI
+        List<Integer> allowedSlots = guiBuilder.getAllowedSlots(guiKey, itemName);
+        if (allowedSlots.isEmpty()) {
+            player.sendMessage("No slot in this GUI accepts that item.");
+            return true; // Blocked
+        }
+
+        // Distribute registered items into allowed slots
+        int remaining = distributeItems(topInventory, shiftClickedItem, allowedSlots);
+        if (remaining > 0) {
+            shiftClickedItem.setAmount(remaining); // Update the remaining stack
+        } else {
+            event.setCurrentItem(null); // Clear the original slot if all items are placed
+        }
+
+        return true; // Block default shift-click behavior
+    }
+
+    private boolean handleDirectPlacement(InventoryClickEvent event, Player player, String guiKey, Inventory topInventory) {
+        InventoryAction action = event.getAction();
+        ItemStack cursorItem = event.getCursor();      // Item on the cursor
+        int slot = event.getSlot();
+
+        // Ensure the clicked slot belongs to the topInventory (custom GUI)
+        if (!topInventory.equals(event.getClickedInventory())) return false;
+
         // Get the button key for the slot
         Map<Integer, String> buttonKeyMap = guiBuilder.getButtonKeyMap(guiKey);
         String buttonKey = buttonKeyMap != null ? buttonKeyMap.get(slot) : null;
 
-        // Check if the slot is a special slot
+        // Only validate special slots
         if (isSpecialSlot(buttonKey)) {
-            ItemStack cursorItem = event.getCursor(); // Item being placed
-            ItemStack slotItem = event.getCurrentItem(); // Item currently in the slot
-            String requiredItemName = guiBuilder.getItemNameForSlot(guiKey, slot);
+            if (cursorItem == null || cursorItem.getType().isAir()) return false;
 
-            // Block invalid items on the cursor
-            if (cursorItem != null && !cursorItem.getType().isAir() &&
-                    !requiredItemName.equals(itemRegistry.getItemTag(cursorItem))) {
+            String requiredItemName = guiBuilder.getItemNameForSlot(guiKey, slot);
+            if (!requiredItemName.equals(itemRegistry.getItemTag(cursorItem))) {
                 player.sendMessage("You can only place '" + requiredItemName + "' in this slot.");
                 return true; // Blocked
             }
 
-            // Block invalid interactions with items in the slot
-            if (slotItem != null && !slotItem.getType().isAir() &&
-                    !requiredItemName.equals(itemRegistry.getItemTag(slotItem))) {
-                player.sendMessage("You cannot interact with invalid items in this slot.");
-                return true; // Blocked
+            // Optionally log the action for debugging
+            switch (action) {
+                case PLACE_ALL -> player.sendMessage("Placed the entire stack.");
+                case PLACE_ONE -> player.sendMessage("Placed one item.");
+                case PLACE_SOME -> player.sendMessage("Placed part of the stack.");
+                case SWAP_WITH_CURSOR -> player.sendMessage("Swapped with the cursor item.");
+                default -> {}
             }
         }
 
-        return false; // Not blocked
+        // Allow normal slots and non-special slots
+        return false;
     }
 
-    // Utility method to check if a slot is special
+    private int distributeItems(Inventory inventory, ItemStack item, List<Integer> allowedSlots) {
+        int remaining = item.getAmount();
+
+        for (int slot : allowedSlots) {
+            if (remaining <= 0) break;
+
+            ItemStack slotItem = inventory.getItem(slot);
+            int maxStackSize = item.getMaxStackSize();
+
+            if (slotItem == null || slotItem.getType().isAir()) {
+                int toPlace = Math.min(remaining, maxStackSize);
+                ItemStack newItem = item.clone();
+                newItem.setAmount(toPlace);
+                inventory.setItem(slot, newItem);
+                remaining -= toPlace;
+            } else if (slotItem.isSimilar(item)) {
+                int spaceAvailable = maxStackSize - slotItem.getAmount();
+                int toPlace = Math.min(remaining, spaceAvailable);
+                slotItem.setAmount(slotItem.getAmount() + toPlace);
+                remaining -= toPlace;
+            }
+        }
+
+        return remaining; // Return any leftover items
+    }
+
     private boolean isSpecialSlot(String buttonKey) {
         return buttonKey != null && buttonKey.endsWith("_slot");
     }
+
+
+
 
 
     /**
