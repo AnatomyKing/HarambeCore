@@ -41,6 +41,12 @@ public class GuiEventListener implements Listener {
 
         // Handle shift-clicks moving items into the custom GUI
         if (event.getAction() == InventoryAction.MOVE_TO_OTHER_INVENTORY && clickedInventory != topInventory) {
+            // Allow shift-clicks in the "enderlink" GUI
+            if ("enderlink".equalsIgnoreCase(guiKey)) {
+                return; // Let enderlink handle shift-clicks without blocking
+            }
+
+            // Block or handle shift-click for other GUIs
             if (handleShiftClick(event, player, guiKey, topInventory)) {
                 event.setCancelled(true); // Cancel the event if blocked
                 Bukkit.getScheduler().runTask(JavaPlugin.getPlugin(Harambefd.class), player::updateInventory); // Sync inventory
@@ -65,9 +71,10 @@ public class GuiEventListener implements Listener {
         // Retrieve item name (tag) for validation
         String itemName = itemRegistry.getItemTag(shiftClickedItem);
 
-        // Allow unregistered items to move freely
+        // Block items without `item_name` from being shift-clicked
         if (!itemRegistry.isItemRegistered(shiftClickedItem)) {
-            return false; // Not blocked
+            player.sendMessage("Only registered items with `item_name` can be shift-clicked into this GUI.");
+            return true; // Blocked
         }
 
         // Get allowed slots for registered items in the custom GUI
@@ -150,9 +157,12 @@ public class GuiEventListener implements Listener {
         return remaining; // Return any leftover items
     }
 
+
+
     private boolean isSpecialSlot(String buttonKey) {
         return buttonKey != null && buttonKey.endsWith("_slot");
     }
+
 
 
 
