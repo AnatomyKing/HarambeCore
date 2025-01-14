@@ -157,7 +157,44 @@ public class GuiEventListener implements Listener {
         return remaining; // Return any leftover items
     }
 
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) return;
 
+        Inventory topInventory = event.getView().getTopInventory(); // Custom GUI
+
+        // Check if the inventory is a custom GUI
+        String guiKey = guiBuilder.getGuiKeyByInventory(player, topInventory);
+        if (guiKey == null) return; // Not a custom GUI
+
+        // Get the dragged item
+        ItemStack draggedItem = event.getCursor();
+        if (draggedItem == null || draggedItem.getType().isAir()) return;
+
+        String itemName = itemRegistry.getItemTag(draggedItem);
+
+        // Validate each slot in the drag event
+        for (int slot : event.getRawSlots()) {
+            // Only handle slots in the custom GUI
+            if (slot >= topInventory.getSize()) continue;
+
+            // Get the button key for the slot
+            Map<Integer, String> buttonKeyMap = guiBuilder.getButtonKeyMap(guiKey);
+            String buttonKey = buttonKeyMap != null ? buttonKeyMap.get(slot) : null;
+
+            // Only validate special slots
+            if (isSpecialSlot(buttonKey)) {
+                String requiredItemName = guiBuilder.getItemNameForSlot(guiKey, slot);
+
+                if (!itemRegistry.isItemRegistered(draggedItem) || !requiredItemName.equals(itemName)) {
+                    player.sendMessage("You can only drag '" + requiredItemName + "' into this slot.");
+                    event.setCancelled(true); // Block the drag
+                    Bukkit.getScheduler().runTask(JavaPlugin.getPlugin(Harambefd.class), player::updateInventory); // Sync inventory
+                    return;
+                }
+            }
+        }
+    }
 
     private boolean isSpecialSlot(String buttonKey) {
         return buttonKey != null && buttonKey.endsWith("_slot");
