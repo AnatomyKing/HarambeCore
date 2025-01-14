@@ -28,30 +28,23 @@ public class GuiEventListener implements Listener {
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
 
-        // Get the inventories involved
         Inventory topInventory = event.getView().getTopInventory(); // Custom GUI
         Inventory clickedInventory = event.getClickedInventory();   // Source inventory
 
-        // Ensure the click is in the player's inventory or the custom GUI
         if (clickedInventory == null) return;
 
-        // Check if the inventory is a custom GUI
         String guiKey = guiBuilder.getGuiKeyByInventory(player, topInventory);
         if (guiKey == null) return; // Not a custom GUI
 
         // Handle shift-clicks moving items into the custom GUI
         if (event.getAction() == InventoryAction.MOVE_TO_OTHER_INVENTORY && clickedInventory != topInventory) {
-            // Allow shift-clicks in the "enderlink" GUI
-            if ("enderlink".equalsIgnoreCase(guiKey)) {
-                return; // Let enderlink handle shift-clicks without blocking
-            }
+            if ("enderlink".equalsIgnoreCase(guiKey)) return; // Allow shift-clicks in "enderlink" GUI
 
-            // Block or handle shift-click for other GUIs
             if (handleShiftClick(event, player, guiKey, topInventory)) {
                 event.setCancelled(true); // Cancel the event if blocked
-                Bukkit.getScheduler().runTask(JavaPlugin.getPlugin(Harambefd.class), player::updateInventory); // Sync inventory
-                return;
+                syncInventory(player);
             }
+            return;
         }
 
         // Ensure the click is in the topInventory (custom GUI)
@@ -60,74 +53,89 @@ public class GuiEventListener implements Listener {
         // Handle direct placement
         if (handleDirectPlacement(event, player, guiKey, topInventory)) {
             event.setCancelled(true); // Cancel the event if blocked
-            Bukkit.getScheduler().runTask(JavaPlugin.getPlugin(Harambefd.class), player::updateInventory); // Sync inventory
+            syncInventory(player);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+
+        Inventory topInventory = event.getView().getTopInventory(); // Custom GUI
+        String guiKey = guiBuilder.getGuiKeyByInventory(player, topInventory);
+        if (guiKey == null) return; // Not a custom GUI
+
+        ItemStack draggedItem = event.getOldCursor();
+        if (draggedItem == null || draggedItem.getType().isAir()) return;
+
+        String itemName = itemRegistry.getItemTag(draggedItem);
+
+        for (int slot : event.getRawSlots()) {
+            if (slot >= topInventory.getSize()) continue;
+
+            Map<Integer, String> buttonKeyMap = guiBuilder.getButtonKeyMap(guiKey);
+            String buttonKey = buttonKeyMap != null ? buttonKeyMap.get(slot) : null;
+
+            if (isSpecialSlot(buttonKey)) {
+                String requiredItemName = guiBuilder.getItemNameForSlot(guiKey, slot);
+
+                if (!itemRegistry.isItemRegistered(draggedItem) || !requiredItemName.equals(itemName)) {
+                    player.sendMessage("You can only drag '" + requiredItemName + "' into this slot.");
+                    event.setCancelled(true); // Block the drag
+                    returnDraggedItemToCursor(player, draggedItem);
+                    return;
+                }
+            }
         }
     }
 
     private boolean handleShiftClick(InventoryClickEvent event, Player player, String guiKey, Inventory topInventory) {
-        ItemStack shiftClickedItem = event.getCurrentItem(); // Item being shift-clicked
+        ItemStack shiftClickedItem = event.getCurrentItem();
         if (shiftClickedItem == null || shiftClickedItem.getType().isAir()) return false;
 
-        // Retrieve item name (tag) for validation
         String itemName = itemRegistry.getItemTag(shiftClickedItem);
 
-        // Block items without `item_name` from being shift-clicked
         if (!itemRegistry.isItemRegistered(shiftClickedItem)) {
             player.sendMessage("Only registered items with `item_name` can be shift-clicked into this GUI.");
             return true; // Blocked
         }
 
-        // Get allowed slots for registered items in the custom GUI
         List<Integer> allowedSlots = guiBuilder.getAllowedSlots(guiKey, itemName);
         if (allowedSlots.isEmpty()) {
             player.sendMessage("No slot in this GUI accepts that item.");
             return true; // Blocked
         }
 
-        // Distribute registered items into allowed slots
         int remaining = distributeItems(topInventory, shiftClickedItem, allowedSlots);
         if (remaining > 0) {
-            shiftClickedItem.setAmount(remaining); // Update the remaining stack
+            shiftClickedItem.setAmount(remaining);
         } else {
-            event.setCurrentItem(null); // Clear the original slot if all items are placed
+            event.setCurrentItem(null);
         }
 
         return true; // Block default shift-click behavior
     }
 
     private boolean handleDirectPlacement(InventoryClickEvent event, Player player, String guiKey, Inventory topInventory) {
-        InventoryAction action = event.getAction();
-        ItemStack cursorItem = event.getCursor();      // Item on the cursor
+        ItemStack cursorItem = event.getCursor();
         int slot = event.getSlot();
 
-        // Ensure the clicked slot belongs to the topInventory (custom GUI)
         if (!topInventory.equals(event.getClickedInventory())) return false;
 
-        // Get the button key for the slot
         Map<Integer, String> buttonKeyMap = guiBuilder.getButtonKeyMap(guiKey);
         String buttonKey = buttonKeyMap != null ? buttonKeyMap.get(slot) : null;
 
-        // Only validate special slots
         if (isSpecialSlot(buttonKey)) {
             if (cursorItem == null || cursorItem.getType().isAir()) return false;
 
             String requiredItemName = guiBuilder.getItemNameForSlot(guiKey, slot);
             if (!requiredItemName.equals(itemRegistry.getItemTag(cursorItem))) {
                 player.sendMessage("You can only place '" + requiredItemName + "' in this slot.");
+                returnDraggedItemToCursor(player, cursorItem);
                 return true; // Blocked
-            }
-
-            // Optionally log the action for debugging
-            switch (action) {
-                case PLACE_ALL -> player.sendMessage("Placed the entire stack.");
-                case PLACE_ONE -> player.sendMessage("Placed one item.");
-                case PLACE_SOME -> player.sendMessage("Placed part of the stack.");
-                case SWAP_WITH_CURSOR -> player.sendMessage("Swapped with the cursor item.");
-                default -> {}
             }
         }
 
-        // Allow normal slots and non-special slots
         return false;
     }
 
@@ -157,49 +165,20 @@ public class GuiEventListener implements Listener {
         return remaining; // Return any leftover items
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    public void onInventoryDrag(InventoryDragEvent event) {
-        if (!(event.getWhoClicked() instanceof Player player)) return;
+    private void returnDraggedItemToCursor(Player player, ItemStack item) {
+        Bukkit.getScheduler().runTask(JavaPlugin.getPlugin(Harambefd.class), () -> {
+            player.setItemOnCursor(item);
+            player.updateInventory();
+        });
+    }
 
-        Inventory topInventory = event.getView().getTopInventory(); // Custom GUI
-
-        // Check if the inventory is a custom GUI
-        String guiKey = guiBuilder.getGuiKeyByInventory(player, topInventory);
-        if (guiKey == null) return; // Not a custom GUI
-
-        // Get the dragged item
-        ItemStack draggedItem = event.getCursor();
-        if (draggedItem == null || draggedItem.getType().isAir()) return;
-
-        String itemName = itemRegistry.getItemTag(draggedItem);
-
-        // Validate each slot in the drag event
-        for (int slot : event.getRawSlots()) {
-            // Only handle slots in the custom GUI
-            if (slot >= topInventory.getSize()) continue;
-
-            // Get the button key for the slot
-            Map<Integer, String> buttonKeyMap = guiBuilder.getButtonKeyMap(guiKey);
-            String buttonKey = buttonKeyMap != null ? buttonKeyMap.get(slot) : null;
-
-            // Only validate special slots
-            if (isSpecialSlot(buttonKey)) {
-                String requiredItemName = guiBuilder.getItemNameForSlot(guiKey, slot);
-
-                if (!itemRegistry.isItemRegistered(draggedItem) || !requiredItemName.equals(itemName)) {
-                    player.sendMessage("You can only drag '" + requiredItemName + "' into this slot.");
-                    event.setCancelled(true); // Block the drag
-                    Bukkit.getScheduler().runTask(JavaPlugin.getPlugin(Harambefd.class), player::updateInventory); // Sync inventory
-                    return;
-                }
-            }
-        }
+    private void syncInventory(Player player) {
+        Bukkit.getScheduler().runTask(JavaPlugin.getPlugin(Harambefd.class), player::updateInventory);
     }
 
     private boolean isSpecialSlot(String buttonKey) {
         return buttonKey != null && buttonKey.endsWith("_slot");
     }
-
 
 
 
