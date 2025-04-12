@@ -1,4 +1,4 @@
-package net.anatomyworld.harambeCore;
+package net.anatomyworld.harambeCore.item;
 
 import org.bukkit.Material;
 import org.bukkit.entity.Player;

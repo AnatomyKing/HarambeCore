@@ -1,7 +1,8 @@
 package net.anatomyworld.harambeCore;
 
-import net.anatomyworld.harambeCore.harambemethods.ItemRegistry;
-import net.anatomyworld.harambeCore.harambemethods.PoisonEffect;
+import net.anatomyworld.harambeCore.item.EconomyHandler;
+import net.anatomyworld.harambeCore.item.ItemRegistry;
+import net.anatomyworld.harambeCore.world.PoisonEffect;
 import org.bukkit.Bukkit;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.configuration.file.FileConfiguration;

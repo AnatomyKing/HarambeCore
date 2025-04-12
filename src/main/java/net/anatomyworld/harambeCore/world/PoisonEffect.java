@@ -1,4 +1,4 @@
-package net.anatomyworld.harambeCore.harambemethods;
+package net.anatomyworld.harambeCore.world;
 
 import net.kyori.adventure.text.Component;
 import org.bukkit.Material;

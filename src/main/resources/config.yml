@@ -43,17 +43,19 @@ gui:
 
   # === Example GUI 3: Enderlink ===
   enderlink:
+    storage: true #  If true, GUI acts like a persistent storage (saved to disk)
     title: "&5Enderlink Storage"
     size: 54
 
     buttons:
       storage_slot:
-        slot: [13, 14, 22, 23, 31, 32] # Multi-slot storage group
+        slot: [ 13, 14, 22, 23, 31, 32 ] #  Slot(s) for storage (player can place/remove items)
+
       clear_button:
         material: "BARRIER"
         name: "&cClear Storage"
-        slot: [49, 50] # Multi-slot button
-        logic: "minecraft:clear %player%"
+        slot: [ 49 ] #  Slot(s) for this button
+        logic: "minecraft:clear %player%" #  Command to run on click (run as console)
 
 
 poison:

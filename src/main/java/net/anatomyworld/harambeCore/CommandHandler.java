@@ -3,7 +3,7 @@ package net.anatomyworld.harambeCore;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
-import net.anatomyworld.harambeCore.harambemethods.ItemRegistry;
+import net.anatomyworld.harambeCore.item.ItemRegistry;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import org.bukkit.Bukkit;
@@ -113,7 +113,7 @@ public class CommandHandler {
                         )
         );
 
-        // ✅ Register dynamic GUI commands
+        // Register dynamic GUI commands
         guiBuilder.getGuiKeys().forEach(guiKey -> {
             dispatcher.register(
                     Commands.literal(guiKey.toLowerCase())

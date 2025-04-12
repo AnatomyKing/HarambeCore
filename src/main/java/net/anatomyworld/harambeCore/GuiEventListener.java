@@ -1,7 +1,7 @@
 package net.anatomyworld.harambeCore;
 
 import net.anatomyworld.harambeCore.GuiBuilder.SlotType;
-import net.anatomyworld.harambeCore.harambemethods.ItemRegistry;
+import net.anatomyworld.harambeCore.item.ItemRegistry;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;

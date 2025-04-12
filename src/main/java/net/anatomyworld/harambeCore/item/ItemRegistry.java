@@ -1,4 +1,4 @@
-package net.anatomyworld.harambeCore.harambemethods;
+package net.anatomyworld.harambeCore.item;
 
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.inventory.ItemStack;
