@@ -1,0 +1,61 @@
+filler:
+  material: "BLACK_STAINED_GLASS_PANE"
+  custom_model_data: 0
+  name: "&8" # gray invisible name (looks clean)
+
+gui:
+
+  # === Example GUI 1: Krobus ===
+  krobus:
+    title: "&cSpawn Menu"
+    size: 27
+
+    buttons:
+      # Button: Pig Button
+      pig_button:
+        material: "PIG_SPAWN_EGG"
+        custom_model_data: 0
+        name: "&dClick to spawn a pig!"
+        slot: [20] # Slot position(s)
+        logic: "minecraft:summon minecraft:pig" # Command to run
+
+      # Storage slot (empty input slot)
+      item_slot:
+        slot: [13] # Slot position(s)
+        # No material, so it's empty, player can place items inside.
+
+  # === Example GUI 2: Interface GUI ===
+  interface:
+    title: "&aInterface Menu"
+    size: 54
+
+    buttons:
+      # Empty slot for input / player use
+      input_slot:
+        slot: [22]
+
+      # Example command button
+      example_button:
+        material: "DIAMOND"
+        name: "&bGive yourself a diamond!"
+        slot: [11]
+        logic: "minecraft:give %player% minecraft:diamond"
+
+  # === Example GUI 3: Enderlink ===
+  enderlink:
+    title: "&5Enderlink Storage"
+    size: 54
+
+    buttons:
+      storage_slot:
+        slot: [13, 14, 22, 23, 31, 32] # Multiple slots
+      clear_button:
+        material: "BARRIER"
+        name: "&cClear Storage"
+        slot: [49]
+        logic: "minecraft:clear %player%"
+
+
+poison:
+  poison-world: "dungeon_build"
+  poison-block: "minecraft:tripwire[attached=false,disarmed=true,east=true,north=false,powered=false,west=true]"
