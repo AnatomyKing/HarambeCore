@@ -16,10 +16,17 @@ import java.util.*;
 
 public class GuiBuilder {
 
-    private FileConfiguration config;
+    public enum SlotType {
+        BUTTON,
+        STORAGE_SLOT,
+        FILLER
+    }
+
     private final Map<UUID, Map<String, Inventory>> playerGuis = new HashMap<>();
-    private final Map<String, Map<Integer, String>> buttonKeyCache = new HashMap<>();
-    private final Set<Integer> slotPositions = new HashSet<>();
+    private final Map<String, Map<Integer, SlotType>> guiSlotTypes = new HashMap<>();
+    private final Map<String, Map<Integer, String>> buttonLogicCache = new HashMap<>();
+
+    private FileConfiguration config;
     private ItemStack cachedFillerItem;
 
     public GuiBuilder(JavaPlugin plugin, FileConfiguration config) {
@@ -27,26 +34,28 @@ public class GuiBuilder {
         this.cachedFillerItem = createFillerItem();
     }
 
+    public Map<String, Map<Integer, SlotType>> getGuiSlotTypes() {
+        return guiSlotTypes;
+    }
+
     public void updateConfig(FileConfiguration config) {
         this.config = config;
         playerGuis.clear();
-        buttonKeyCache.clear();
+        guiSlotTypes.clear();
+        buttonLogicCache.clear();
         this.cachedFillerItem = createFillerItem();
     }
 
     public Set<String> getGuiKeys() {
         ConfigurationSection guiSection = config.getConfigurationSection("gui");
-        if (guiSection != null) {
-            return guiSection.getKeys(false);
-        }
-        return Collections.emptySet();
+        return guiSection != null ? guiSection.getKeys(false) : Collections.emptySet();
     }
 
     public void createAndOpenGui(String guiKey, Player player) {
-        UUID playerId = player.getUniqueId();
-        Map<String, Inventory> guis = playerGuis.computeIfAbsent(playerId, k -> new HashMap<>());
+        Inventory gui = playerGuis
+                .computeIfAbsent(player.getUniqueId(), k -> new HashMap<>())
+                .computeIfAbsent(guiKey, k -> generateGui(guiKey));
 
-        Inventory gui = guis.computeIfAbsent(guiKey, k -> generateGui(guiKey));
         if (gui != null) {
             player.openInventory(gui);
         } else {
@@ -63,8 +72,8 @@ public class GuiBuilder {
         Component titleComponent = LegacyComponentSerializer.legacyAmpersand().deserialize(title);
 
         Inventory gui = Bukkit.createInventory(null, size, titleComponent);
-        Map<Integer, String> buttonKeyMap = new HashMap<>();
-        slotPositions.clear();
+        Map<Integer, SlotType> slotTypes = new HashMap<>();
+        Map<Integer, String> buttonLogics = new HashMap<>();
 
         ConfigurationSection buttonsSection = guiSection.getConfigurationSection("buttons");
         if (buttonsSection != null) {
@@ -75,35 +84,41 @@ public class GuiBuilder {
                 List<Integer> slots = buttonConfig.getIntegerList("slot");
 
                 if (buttonKey.endsWith("_slot")) {
-                    // Register slots to skip filler later
-                    slotPositions.addAll(slots);
-                    continue; // Don't place items for *_slot
+                    for (int slot : slots) {
+                        slotTypes.put(slot, SlotType.STORAGE_SLOT);
+                    }
+                    continue;
                 }
 
-                // Process *_button normally
+                // Handle _button types
                 String materialName = buttonConfig.getString("material");
                 String itemName = buttonConfig.getString("name", "&fButton");
                 int customModelData = buttonConfig.getInt("custom_model_data", 0);
+                String logicCommand = buttonConfig.getString("logic");
 
                 ItemStack item = createButtonItem(materialName, itemName, customModelData);
                 if (item == null) continue;
 
                 for (int slot : slots) {
                     gui.setItem(slot, item);
-                    buttonKeyMap.put(slot, buttonKey);
-                    slotPositions.add(slot); // Register slot position as used
+                    slotTypes.put(slot, SlotType.BUTTON);
+                    if (logicCommand != null && !logicCommand.isEmpty()) {
+                        buttonLogics.put(slot, logicCommand);
+                    }
                 }
             }
         }
 
-        buttonKeyCache.put(guiKey, buttonKeyMap);
-
-        // Fill unused slots with filler item
+        // Fill empty slots with filler item
         for (int i = 0; i < size; i++) {
-            if (!slotPositions.contains(i) && gui.getItem(i) == null) {
+            if (!slotTypes.containsKey(i)) {
                 gui.setItem(i, cachedFillerItem);
+                slotTypes.put(i, SlotType.FILLER);
             }
         }
+
+        guiSlotTypes.put(guiKey, slotTypes);
+        buttonLogicCache.put(guiKey, buttonLogics);
 
         return gui;
     }
@@ -116,9 +131,7 @@ public class GuiBuilder {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
         meta.displayName(LegacyComponentSerializer.legacyAmpersand().deserialize(itemName));
-        if (customModelData > 0) {
-            meta.setCustomModelData(customModelData);
-        }
+        if (customModelData > 0) meta.setCustomModelData(customModelData);
         item.setItemMeta(meta);
         return item;
     }
@@ -132,32 +145,16 @@ public class GuiBuilder {
         ItemMeta meta = item.getItemMeta();
         meta.displayName(LegacyComponentSerializer.legacyAmpersand().deserialize(config.getString("filler.name", "&8")));
         int customModelData = config.getInt("filler.custom_model_data", 0);
-        if (customModelData > 0) {
-            meta.setCustomModelData(customModelData);
-        }
+        if (customModelData > 0) meta.setCustomModelData(customModelData);
         item.setItemMeta(meta);
         return item;
     }
 
     public void handleButtonClick(Player player, String guiKey, int slot) {
-        Map<Integer, String> buttonMap = buttonKeyCache.get(guiKey);
-        if (buttonMap == null) return;
-
-        String buttonKey = buttonMap.get(slot);
-        if (buttonKey == null) return;
-
-        ConfigurationSection buttonConfig = config.getConfigurationSection("gui." + guiKey + ".buttons." + buttonKey);
-        if (buttonConfig == null) return;
-
-        String logicCommand = buttonConfig.getString("logic");
-        if (logicCommand != null && !logicCommand.isEmpty()) {
-            executeLogic(player, logicCommand);
+        String command = buttonLogicCache.getOrDefault(guiKey, Collections.emptyMap()).get(slot);
+        if (command != null && !command.isEmpty()) {
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command.replace("%player%", player.getName()));
         }
-    }
-
-    private void executeLogic(Player player, String command) {
-        String parsedCommand = command.replace("%player%", player.getName());
-        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), parsedCommand);
     }
 
     public String getGuiKeyByInventory(Player player, Inventory inventory) {

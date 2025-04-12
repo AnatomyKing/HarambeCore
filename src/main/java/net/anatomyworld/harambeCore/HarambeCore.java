@@ -106,15 +106,4 @@ public class HarambeCore extends JavaPlugin implements Listener {
         }
     }
 
-    public GuiBuilder getGuiBuilder() {
-        return guiBuilder;
-    }
-
-    public ItemRegistry getItemRegistry() {
-        return itemRegistry;
-    }
-
-    public FileConfiguration getPluginConfig() {
-        return config;
-    }
 }

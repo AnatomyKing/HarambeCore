@@ -48,11 +48,11 @@ gui:
 
     buttons:
       storage_slot:
-        slot: [13, 14, 22, 23, 31, 32] # Multiple slots
+        slot: [13, 14, 22, 23, 31, 32] # Multi-slot storage group
       clear_button:
         material: "BARRIER"
         name: "&cClear Storage"
-        slot: [49]
+        slot: [49, 50] # Multi-slot button
         logic: "minecraft:clear %player%"
 
 
