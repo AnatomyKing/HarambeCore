@@ -1,0 +1,85 @@
+filler:
+  material: "BLACK_STAINED_GLASS_PANE"
+  custom_model_data: 0
+  name: "&8"
+
+gui:
+  krobus:
+    title: "&cSpawn Messnu"
+    size: 27
+    buttons:
+      pig_button:
+        material: "PIG_SPAWN_EGG"
+        custom_model_data: 0
+        name: "&dClick me to spawn a pig!"
+        slot: [ 20 ]
+
+  interface:
+    title: "&aMy Interface GUI"
+    size: 54
+    buttons:
+      submit_button:
+        material: "BLUE_WOOL"
+        custom_model_data: 123
+        name: "&aClick me for an Emerald!"
+        slot: [ 22 ]
+
+      fish_button:
+        material: "TROPICAL_FISH"
+        custom_model_data: 0
+        name: "&aFish Catalog"
+        slot: [ 28 ]
+
+      diamond_button:
+        material: "DIAMOND"
+        custom_model_data: 0
+        name: "&bClick me for a Diamond!"
+        slot: [ 0, 8, 52 ]
+        pay: 20
+
+      sucker_slot:
+        item_name: special_apple
+        button: submit_button
+        consume: false
+        slot: [ 47, 49, 51 ]
+        pay: 60
+
+      checker_slot:
+        item_name: gold_amber
+        consume: true
+        slot: [ 12 ]
+
+      submit_slot:
+        item_name: glowing_pearl
+        consume: true
+        slot: [ 14 ]
+
+  spawn:
+    title: "&cSpawn Menu"
+    size: 27
+    buttons:
+      pig_button:
+        material: "PIG_SPAWN_EGG"
+        custom_model_data: 0
+        name: "&dClick me to spawn a pig!"
+        slot: [20]
+
+  enderlink:
+    title: "&aEnderlink Storage"
+    size: 54
+    buttons:
+      next_page_button:
+        material: "ARROW"
+        custom_model_data: 0
+        name: "&aNext Page"
+        slot: [44]
+
+      previous_page_button:
+        material: "ARROW"
+        custom_model_data: 0
+        name: "&cPrevious Page"
+        slot: [36]
+
+poison:
+  poison-world: "dungeon_build"
+  poison-block: "minecraft:tripwire[attached=false,disarmed=true,east=true,north=false,powered=false,west=true]"

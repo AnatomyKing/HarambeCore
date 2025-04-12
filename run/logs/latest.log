@@ -1,0 +1,96 @@
+[21:33:12] [ServerMain/INFO]: [bootstrap] Running Java 21 (Java HotSpot(TM) 64-Bit Server VM 21.0.5+9-LTS-239; Oracle Corporation null) on Windows 11 10.0 (amd64)
+[21:33:12] [ServerMain/INFO]: [bootstrap] Loading Paper 1.21.3-83-ver/1.21.3@d6c81da (2025-03-28T15:57:09Z) for Minecraft 1.21.3
+[21:33:13] [ServerMain/INFO]: [PluginInitializerManager] Initializing plugins...
+[21:33:13] [ServerMain/INFO]: [PluginInitializerManager] Initialized 4 plugins
+[21:33:13] [ServerMain/INFO]: [PluginInitializerManager] Bukkit plugins (4):
+ - HarambeCore (1.0-SNAPSHOT), PlaceholderAPI (2.11.6), Vault (1.7.3-b131), XConomy (2.26.3)
+[21:33:17] [ServerMain/INFO]: Environment: Environment[sessionHost=https://sessionserver.mojang.com, servicesHost=https://api.minecraftservices.com, name=PROD]
+[21:33:19] [ServerMain/INFO]: Loaded 1337 recipes
+[21:33:19] [ServerMain/INFO]: Loaded 1448 advancements
+[21:33:19] [Server thread/INFO]: Starting minecraft server version 1.21.3
+[21:33:19] [Server thread/INFO]: Loading properties
+[21:33:19] [Server thread/INFO]: This server is running Paper version 1.21.3-83-ver/1.21.3@d6c81da (2025-03-28T15:57:09Z) (Implementing API version 1.21.3-R0.1-SNAPSHOT)
+[21:33:20] [Server thread/INFO]: [spark] This server bundles the spark profiler. For more information please visit https://docs.papermc.io/paper/profiling
+[21:33:20] [Server thread/INFO]: Server Ping Player Sample Count: 12
+[21:33:20] [Server thread/INFO]: Using 4 threads for Netty based IO
+[21:33:20] [Server thread/INFO]: [MoonriseCommon] Paper is using 4 worker threads, 1 I/O threads
+[21:33:20] [Server thread/INFO]: [ChunkTaskScheduler] Chunk system is using population gen parallelism: true
+[21:33:20] [Server thread/INFO]: Default game type: SURVIVAL
+[21:33:20] [Server thread/INFO]: Generating keypair
+[21:33:20] [Server thread/INFO]: Starting Minecraft server on *:25565
+[21:33:21] [Server thread/INFO]: Using default channel type
+[21:33:21] [Server thread/INFO]: Paper: Using Java compression from Velocity.
+[21:33:21] [Server thread/INFO]: Paper: Using Java cipher from Velocity.
+[21:33:21] [Server thread/INFO]: [SpigotLibraryLoader] [XConomy] Loading 1 libraries... please wait
+[21:33:21] [Server thread/INFO]: [SpigotLibraryLoader] [XConomy] Loaded library C:\plugins\paper\HarambeCore\run\libraries\redis\clients\jedis\4.3.1\jedis-4.3.1.jar
+[21:33:21] [Server thread/INFO]: [SpigotLibraryLoader] [XConomy] Loaded library C:\plugins\paper\HarambeCore\run\libraries\org\slf4j\slf4j-api\1.7.36\slf4j-api-1.7.36.jar
+[21:33:21] [Server thread/INFO]: [SpigotLibraryLoader] [XConomy] Loaded library C:\plugins\paper\HarambeCore\run\libraries\org\apache\commons\commons-pool2\2.11.1\commons-pool2-2.11.1.jar
+[21:33:21] [Server thread/INFO]: [SpigotLibraryLoader] [XConomy] Loaded library C:\plugins\paper\HarambeCore\run\libraries\org\json\json\20220320\json-20220320.jar
+[21:33:21] [Server thread/INFO]: [SpigotLibraryLoader] [XConomy] Loaded library C:\plugins\paper\HarambeCore\run\libraries\com\google\code\gson\gson\2.8.9\gson-2.8.9.jar
+[21:33:21] [Server thread/INFO]: [Vault] Loading server plugin Vault v1.7.3-b131
+[21:33:21] [Server thread/INFO]: [PlaceholderAPI] Loading server plugin PlaceholderAPI v2.11.6
+[21:33:21] [Server thread/INFO]: [HarambeCore] Loading server plugin HarambeCore v1.0-SNAPSHOT
+[21:33:21] [Server thread/INFO]: [XConomy] Loading server plugin XConomy v2.26.3
+[21:33:21] [Server thread/INFO]: Server permissions file permissions.yml is empty, ignoring it
+[21:33:21] [Server thread/INFO]: [Vault] Enabling Vault v1.7.3-b131
+[21:33:21] [Server thread/INFO]: [Vault] [Permission] SuperPermissions loaded as backup permission system.
+[21:33:21] [Server thread/INFO]: [Vault] Enabled Version 1.7.3-b131
+[21:33:21] [Server thread/INFO]: [XConomy] Enabling XConomy v2.26.3
+[21:33:21] [Server thread/INFO]: [XConomy] UUID-Mode: Default
+[21:33:21] [Server thread/INFO]: [XConomy] Language: ENGLISH
+[21:33:21] [Server thread/INFO]: [XConomy] Saving method - SQLite
+[21:33:21] [Server thread/INFO]: [XConomy] SQLite successfully connected
+[21:33:21] [Server thread/INFO]: [XConomy] XConomy successfully enabled
+[21:33:21] [Server thread/INFO]: [XConomy] Found PlaceholderAPI
+[21:33:21] [Server thread/INFO]: [PlaceholderAPI] Successfully registered internal expansion: xconomy [2.26.3]
+[21:33:21] [Server thread/INFO]: [XConomy] PlaceholderAPI successfully hooked
+[21:33:21] [Server thread/INFO]: [XConomy] ===== YiC =====
+[21:33:21] [Server thread/INFO]: Preparing level "world"
+[21:33:22] [Folia Async Scheduler Thread #0/INFO]: [XConomy] Is the latest version
+[21:33:22] [Server thread/INFO]: Preparing start region for dimension minecraft:overworld
+[21:33:22] [Paper Common Worker #2/INFO]: [MCTypeRegistry] Initialising converters for DataConverter...
+[21:33:22] [Server thread/INFO]: Preparing spawn area: 0%
+[21:33:22] [Paper Common Worker #2/INFO]: [MCTypeRegistry] Finished initialising converters for DataConverter in 381.6ms
+[21:33:22] [Server thread/INFO]: Preparing spawn area: 4%
+[21:33:23] [Server thread/INFO]: Time elapsed: 917 ms
+[21:33:23] [Server thread/INFO]: Preparing start region for dimension minecraft:the_nether
+[21:33:23] [Server thread/INFO]: Preparing spawn area: 0%
+[21:33:23] [Server thread/INFO]: Time elapsed: 82 ms
+[21:33:23] [Server thread/INFO]: Preparing start region for dimension minecraft:the_end
+[21:33:23] [Server thread/INFO]: Preparing spawn area: 0%
+[21:33:23] [Server thread/INFO]: Time elapsed: 46 ms
+[21:33:23] [Server thread/INFO]: [PlaceholderAPI] Enabling PlaceholderAPI v2.11.6
+[21:33:23] [Server thread/INFO]: [PlaceholderAPI] Fetching available expansion information...
+[21:33:23] [Server thread/INFO]: [HarambeCore] Enabling HarambeCore v1.0-SNAPSHOT
+[21:33:23] [Server thread/INFO]: [HarambeCore] §aHarambeCore has been enabled!
+[21:33:23] [Server thread/INFO]: [HarambeCore] Loaded poison-world: dungeon_build
+[21:33:23] [Server thread/INFO]: [HarambeCore] Loaded poison-block: minecraft:tripwire[attached=false,disarmed=true,east=true,north=false,powered=false,west=true]
+[21:33:23] [Server thread/INFO]: [HarambeCore] Loaded poison-block data: minecraft:tripwire[attached=false,disarmed=true,east=true,north=false,powered=false,south=false,west=true]
+[21:33:23] [Server thread/INFO]: [HarambeCore] §aRegistered /harambe command tree and GUI commands.
+[21:33:23] [Server thread/INFO]: [HarambeCore] §aHarambeCore plugin setup complete!
+[21:33:23] [Server thread/INFO]: [spark] Starting background profiler...
+[21:33:24] [Server thread/INFO]: [spark] The async-profiler engine is not supported for your os/arch (windows11/amd64), so the built-in Java engine will be used instead.
+[21:33:24] [Server thread/INFO]: [PlaceholderAPI] Placeholder expansion registration initializing...
+[21:33:24] [Server thread/INFO]: Done preparing level "world" (2.235s)
+[21:33:24] [Server thread/INFO]: Running delayed init tasks
+[21:33:24] [Server thread/INFO]: [PlaceholderAPI] Successfully registered external expansion: vault [1.8.3]
+[21:33:24] [Server thread/INFO]: 1 placeholder hook(s) registered!
+[21:33:24] [Server thread/INFO]: Done (12.848s)! For help, type "help"
+[21:33:24] [Craft Scheduler Thread - 2 - Vault/INFO]: [Vault] Checking for Updates ... 
+[21:33:24] [Craft Scheduler Thread - 2 - Vault/INFO]: [Vault] No new version available
+[21:33:37] [User Authenticator #0/INFO]: UUID of player AnatomyKing is 0c1fbdc4-0f25-470a-99c8-b723c656be03
+[21:33:38] [Server thread/INFO]: AnatomyKing joined the game
+[21:33:38] [Server thread/INFO]: AnatomyKing[/127.0.0.1:62189] logged in with entity id 33 at ([world]-83.96388845435189, 69.0, 57.483311981817145)
+[21:34:58] [Server thread/INFO]: AnatomyKing issued server command: /krobus
+[21:35:01] [Server thread/INFO]: Summoned new Pig
+[21:35:14] [Server thread/INFO]: AnatomyKing issued server command: /krobus
+[21:35:15] [Server thread/INFO]: Summoned new Pig
+[21:35:16] [Server thread/INFO]: Summoned new Pig
+[21:35:16] [Server thread/INFO]: Summoned new Pig
+[21:35:16] [Server thread/INFO]: Summoned new Pig
+[21:35:16] [Server thread/INFO]: Summoned new Pig
+[21:35:16] [Server thread/INFO]: Summoned new Pig
+[21:35:16] [Server thread/INFO]: Summoned new Pig
+[21:36:51] [Server thread/INFO]: AnatomyKing issued server command: /krobus
+[21:37:06] [Server thread/INFO]: AnatomyKing issued server command: /interface
+[21:37:28] [Server thread/INFO]: AnatomyKing issued server command: /interface
