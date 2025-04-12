@@ -17,9 +17,9 @@ import java.util.*;
 public class GuiBuilder {
 
     private FileConfiguration config;
-
     private final Map<UUID, Map<String, Inventory>> playerGuis = new HashMap<>();
     private final Map<String, Map<Integer, String>> buttonKeyCache = new HashMap<>();
+    private final Set<Integer> slotPositions = new HashSet<>();
     private ItemStack cachedFillerItem;
 
     public GuiBuilder(JavaPlugin plugin, FileConfiguration config) {
@@ -64,6 +64,7 @@ public class GuiBuilder {
 
         Inventory gui = Bukkit.createInventory(null, size, titleComponent);
         Map<Integer, String> buttonKeyMap = new HashMap<>();
+        slotPositions.clear();
 
         ConfigurationSection buttonsSection = guiSection.getConfigurationSection("buttons");
         if (buttonsSection != null) {
@@ -72,6 +73,14 @@ public class GuiBuilder {
                 if (buttonConfig == null) continue;
 
                 List<Integer> slots = buttonConfig.getIntegerList("slot");
+
+                if (buttonKey.endsWith("_slot")) {
+                    // Register slots to skip filler later
+                    slotPositions.addAll(slots);
+                    continue; // Don't place items for *_slot
+                }
+
+                // Process *_button normally
                 String materialName = buttonConfig.getString("material");
                 String itemName = buttonConfig.getString("name", "&fButton");
                 int customModelData = buttonConfig.getInt("custom_model_data", 0);
@@ -82,14 +91,16 @@ public class GuiBuilder {
                 for (int slot : slots) {
                     gui.setItem(slot, item);
                     buttonKeyMap.put(slot, buttonKey);
+                    slotPositions.add(slot); // Register slot position as used
                 }
             }
         }
 
         buttonKeyCache.put(guiKey, buttonKeyMap);
 
+        // Fill unused slots with filler item
         for (int i = 0; i < size; i++) {
-            if (!buttonKeyMap.containsKey(i) && gui.getItem(i) == null) {
+            if (!slotPositions.contains(i) && gui.getItem(i) == null) {
                 gui.setItem(i, cachedFillerItem);
             }
         }
