@@ -136,3 +136,5 @@ gradle-app.setting
 .idea/
 
 libs/
+
+run/
