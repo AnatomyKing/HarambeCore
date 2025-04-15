@@ -69,7 +69,15 @@ public class GuiBuilder {
 
         String title = guiSection.getString("title", "&cUnnamed GUI");
         int size = guiSection.getInt("size", 54);
-        Component titleComponent = LegacyComponentSerializer.legacyAmpersand().deserialize(title);
+
+        Component titleComponent;
+
+        if (title.contains("§") || title.contains("&")) {
+            titleComponent = LegacyComponentSerializer.legacySection().deserialize(title);
+        } else {
+            titleComponent = Component.text(title);
+        }
+
 
         Inventory gui = Bukkit.createInventory(null, size, titleComponent);
         Map<Integer, SlotType> slotTypes = new HashMap<>();

@@ -3,6 +3,7 @@ package net.anatomyworld.harambeCore;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
+import net.anatomyworld.harambeCore.util.RecipeBookUtils;
 import net.minecraft.network.protocol.game.ClientboundRecipeBookSettingsPacket;
 import net.minecraft.network.protocol.game.ServerboundRecipeBookChangeSettingsPacket;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
@@ -79,7 +80,8 @@ public class RecipeBookPacketListener implements Listener {
                                 player.performCommand(recipeBookCommand);
 
                                 // 2) Force the client to close the *crafting* recipe book
-                                forceCloseClientRecipeBook(player);
+                                RecipeBookUtils.forceCloseClientRecipeBook(player);
+
 
                                 // 3) Optionally refresh their inventory
                                 player.updateInventory();
@@ -108,26 +110,5 @@ public class RecipeBookPacketListener implements Listener {
         if (pipeline.get("recipe_book_toggle_handler") != null) {
             pipeline.remove("recipe_book_toggle_handler");
         }
-    }
-
-    /**
-     * Sends a packet telling the client that its CRAFTING recipe book is closed.
-     */
-    private void forceCloseClientRecipeBook(Player player) {
-        if (!(player instanceof CraftPlayer craftPlayer)) return;
-
-        ServerGamePacketListenerImpl connection = craftPlayer.getHandle().connection;
-
-        // Create recipe settings with CRAFTING set to "closed"
-        RecipeBookSettings forcedClosedSettings = new RecipeBookSettings();
-        forcedClosedSettings.setOpen(RecipeBookType.CRAFTING, false);
-        forcedClosedSettings.setFiltering(RecipeBookType.CRAFTING, false);
-
-        // Build the packet
-        ClientboundRecipeBookSettingsPacket closePacket =
-                new ClientboundRecipeBookSettingsPacket(forcedClosedSettings);
-
-        // Send to the client
-        connection.send(closePacket);
     }
 }

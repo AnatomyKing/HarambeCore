@@ -2,10 +2,15 @@ package net.anatomyworld.harambeCore;
 
 import net.anatomyworld.harambeCore.GuiBuilder.SlotType;
 import net.anatomyworld.harambeCore.item.ItemRegistry;
+import net.anatomyworld.harambeCore.util.RecipeBookUtils;
+import net.minecraft.world.inventory.MenuType;
+import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
@@ -17,6 +22,16 @@ public class GuiEventListener implements Listener {
 
     public GuiEventListener(GuiBuilder guiBuilder, ItemRegistry itemRegistry) {
         this.guiBuilder = guiBuilder;
+    }
+
+
+    @EventHandler
+    public void onInventoryClose(InventoryCloseEvent event) {
+        if (!(event.getPlayer() instanceof Player player)) return;
+
+        if (event.getInventory().getType() == InventoryType.WORKBENCH) {
+            RecipeBookUtils.forceCloseClientRecipeBook(player);
+        }
     }
 
     @EventHandler
@@ -53,5 +68,6 @@ public class GuiEventListener implements Listener {
                 event.setCancelled(true);
             }
         }
+
     }
 }
