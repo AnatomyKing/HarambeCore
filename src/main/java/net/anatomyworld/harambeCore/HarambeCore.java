@@ -35,7 +35,7 @@ public class HarambeCore extends JavaPlugin implements Listener {
         }
 
         saveDefaultConfig();
-        config = getConfig();
+        this.config = getConfig();
         ensureSubmitItemsFolderExists();
 
         // Initialize custom systems
@@ -46,8 +46,10 @@ public class HarambeCore extends JavaPlugin implements Listener {
         registerGuiEventListener();
         registerPoisonEffect();
 
-        // Register packet listener to block recipe book GUI by re-routing to SMOKER
-        recipeBookPacketListener = new RecipeBookPacketListener(this);
+        // Retrieve the recipe book command from config; default to "enderlink"
+        String recipeBookCommand = config.getString("recipe-book-command", "enderlink");
+        // Register packet listener and pass our config-based command
+        recipeBookPacketListener = new RecipeBookPacketListener(this, recipeBookCommand);
 
         // Register your custom commands
         commandHandler.registerCommands();
@@ -65,12 +67,9 @@ public class HarambeCore extends JavaPlugin implements Listener {
         getLogger().info("§cHarambeCore has been disabled!");
     }
 
-    /**
-     * Example of a reload routine
-     */
     public void reloadPlugin() {
         reloadConfig();
-        config = getConfig();
+        this.config = getConfig();
 
         guiBuilder.updateConfig(config);
         commandHandler.registerCommands();
@@ -80,7 +79,10 @@ public class HarambeCore extends JavaPlugin implements Listener {
         if (recipeBookPacketListener != null) {
             recipeBookPacketListener.shutdown();
         }
-        recipeBookPacketListener = new RecipeBookPacketListener(this);
+
+        // Again, read from config in case it changed, then re-create the listener
+        String recipeBookCommand = config.getString("recipe-book-command", "enderlink");
+        recipeBookPacketListener = new RecipeBookPacketListener(this, recipeBookCommand);
 
         getLogger().info("§aPlugin fully reloaded.");
     }
@@ -93,12 +95,10 @@ public class HarambeCore extends JavaPlugin implements Listener {
     }
 
     private void registerGuiEventListener() {
-        getServer().getPluginManager().registerEvents(new GuiEventListener(guiBuilder, itemRegistry), this);
+        getServer().getPluginManager().registerEvents(
+                new GuiEventListener(guiBuilder, itemRegistry), this);
     }
 
-    /**
-     * Example event registration for a custom PoisonEffect
-     */
     private void registerPoisonEffect() {
         String poisonWorld = config.getString("poison.poison-world", "dungeon_build");
         String poisonBlockString = config.getString("poison.poison-block");
@@ -120,3 +120,4 @@ public class HarambeCore extends JavaPlugin implements Listener {
         }
     }
 }
+

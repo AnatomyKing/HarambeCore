@@ -61,3 +61,6 @@ gui:
 poison:
   poison-world: "dungeon_build"
   poison-block: "minecraft:tripwire[attached=false,disarmed=true,east=true,north=false,powered=false,west=true]"
+
+
+recipe-book-command: "enderlink"
