@@ -21,33 +21,35 @@ public class HarambeCore extends JavaPlugin implements Listener {
     private ItemRegistry itemRegistry;
     private GuiBuilder guiBuilder;
     private CommandHandler commandHandler;
+    private RecipeBookPacketListener recipeBookPacketListener;
 
     @Override
     public void onEnable() {
         getLogger().info("§aHarambeCore has been enabled!");
 
-        // Check economy hook
+        // Ensure Vault or economy plugin is present
         if (!EconomyHandler.setupEconomy()) {
             getLogger().severe("Vault not found or no economy plugin found! Disabling plugin.");
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
 
-        // Prepare config and folders
         saveDefaultConfig();
         config = getConfig();
         ensureSubmitItemsFolderExists();
 
-        // Initialize systems
+        // Initialize custom systems
         itemRegistry = new ItemRegistry(this);
         guiBuilder = new GuiBuilder(this, config);
         commandHandler = new CommandHandler(this, guiBuilder, itemRegistry);
 
-        // Register event listeners
         registerGuiEventListener();
         registerPoisonEffect();
 
-        // Register commands (Brigadier)
+        // Register packet listener to block recipe book GUI by re-routing to SMOKER
+        recipeBookPacketListener = new RecipeBookPacketListener(this);
+
+        // Register your custom commands
         commandHandler.registerCommands();
 
         getLogger().info("§aHarambeCore plugin setup complete!");
@@ -55,24 +57,34 @@ public class HarambeCore extends JavaPlugin implements Listener {
 
     @Override
     public void onDisable() {
+        // Remove packet interceptors
+        if (recipeBookPacketListener != null) {
+            recipeBookPacketListener.shutdown();
+        }
+
         getLogger().info("§cHarambeCore has been disabled!");
     }
 
     /**
-     * Called when reloading the plugin (hot-reload safe)
+     * Example of a reload routine
      */
     public void reloadPlugin() {
         reloadConfig();
         config = getConfig();
 
         guiBuilder.updateConfig(config);
-        commandHandler.registerCommands(); // re-register commands to reflect new GUIs
+        commandHandler.registerCommands();
         registerPoisonEffect();
+
+        // Re-inject packet listeners for all players
+        if (recipeBookPacketListener != null) {
+            recipeBookPacketListener.shutdown();
+        }
+        recipeBookPacketListener = new RecipeBookPacketListener(this);
 
         getLogger().info("§aPlugin fully reloaded.");
     }
 
-    // Ensure 'submititems' folder exists
     private void ensureSubmitItemsFolderExists() {
         File submitItemsFolder = new File(getDataFolder(), "submititems");
         if (!submitItemsFolder.exists() && !submitItemsFolder.mkdirs()) {
@@ -80,12 +92,13 @@ public class HarambeCore extends JavaPlugin implements Listener {
         }
     }
 
-    // Register GUI Event Listener
     private void registerGuiEventListener() {
         getServer().getPluginManager().registerEvents(new GuiEventListener(guiBuilder, itemRegistry), this);
     }
 
-    // Register PoisonEffect system
+    /**
+     * Example event registration for a custom PoisonEffect
+     */
     private void registerPoisonEffect() {
         String poisonWorld = config.getString("poison.poison-world", "dungeon_build");
         String poisonBlockString = config.getString("poison.poison-block");
@@ -106,5 +119,4 @@ public class HarambeCore extends JavaPlugin implements Listener {
             getLogger().warning("poison-block configuration is missing or empty.");
         }
     }
-
 }
