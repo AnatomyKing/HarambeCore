@@ -5,6 +5,28 @@ filler:
 
 gui:
 
+
+  shop:
+    title: "&6Item Shop"
+    size: 27
+    buttons:
+      buy_diamond:
+        slot: [11]
+        type: BUTTON
+        action: COMMAND
+        logic: "minecraft:give %player% minecraft:diamond"
+        cost: 25
+        design:
+          material: DIAMOND
+          name: "&bBuy Diamond"
+          custom_model_data: 0
+
+      deposit_slot:
+        slot: [13]
+        type: INPUT_SLOT
+        cost: 10
+
+
   # === GUI 1: Krobus ===
   krobus:
     title: "&cSpawn Menu"

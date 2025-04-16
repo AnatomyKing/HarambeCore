@@ -24,12 +24,12 @@ public class GuiBuilder {
 
     public enum ActionType {
         COMMAND
-        // Future: CALLBACK, MESSAGE, etc.
     }
 
     private final Map<UUID, Map<String, Inventory>> playerGuis = new HashMap<>();
     private final Map<String, Map<Integer, SlotType>> guiSlotTypes = new HashMap<>();
     private final Map<String, Map<Integer, String>> buttonLogicCache = new HashMap<>();
+    private final Map<String, Map<Integer, Double>> guiSlotCosts = new HashMap<>();
 
     private FileConfiguration config;
     private ItemStack cachedFillerItem;
@@ -43,11 +43,16 @@ public class GuiBuilder {
         return guiSlotTypes;
     }
 
+    public Map<Integer, Double> getSlotCosts(String guiKey) {
+        return guiSlotCosts.getOrDefault(guiKey, Collections.emptyMap());
+    }
+
     public void updateConfig(FileConfiguration config) {
         this.config = config;
         playerGuis.clear();
         guiSlotTypes.clear();
         buttonLogicCache.clear();
+        guiSlotCosts.clear();
         this.cachedFillerItem = createFillerItem();
     }
 
@@ -82,6 +87,7 @@ public class GuiBuilder {
         Inventory gui = Bukkit.createInventory(null, size, titleComponent);
         Map<Integer, SlotType> slotTypes = new HashMap<>();
         Map<Integer, String> buttonLogics = new HashMap<>();
+        Map<Integer, Double> slotCosts = new HashMap<>();
 
         ConfigurationSection buttonsSection = guiSection.getConfigurationSection("buttons");
         if (buttonsSection != null) {
@@ -91,6 +97,7 @@ public class GuiBuilder {
 
                 List<Integer> slots = buttonConfig.getIntegerList("slot");
                 String type = buttonConfig.getString("type", "FILLER").toUpperCase(Locale.ROOT);
+                double cost = buttonConfig.getDouble("cost", 0.0);
 
                 SlotType slotType;
                 try {
@@ -100,7 +107,12 @@ public class GuiBuilder {
                 }
 
                 switch (slotType) {
-                    case INPUT_SLOT -> slots.forEach(slot -> slotTypes.put(slot, SlotType.INPUT_SLOT));
+                    case INPUT_SLOT -> {
+                        for (int slot : slots) {
+                            slotTypes.put(slot, SlotType.INPUT_SLOT);
+                            if (cost > 0) slotCosts.put(slot, cost);
+                        }
+                    }
                     case BUTTON -> {
                         ActionType actionType;
                         try {
@@ -123,14 +135,13 @@ public class GuiBuilder {
                         for (int slot : slots) {
                             gui.setItem(slot, item);
                             slotTypes.put(slot, SlotType.BUTTON);
-
+                            if (cost > 0) slotCosts.put(slot, cost);
                             if (actionType == ActionType.COMMAND && logicCommand != null && !logicCommand.isEmpty()) {
                                 buttonLogics.put(slot, logicCommand);
                             }
                         }
                     }
-                    default -> {
-                    }
+                    default -> {}
                 }
             }
         }
@@ -144,6 +155,7 @@ public class GuiBuilder {
 
         guiSlotTypes.put(guiKey, slotTypes);
         buttonLogicCache.put(guiKey, buttonLogics);
+        guiSlotCosts.put(guiKey, slotCosts);
 
         return gui;
     }
@@ -185,10 +197,6 @@ public class GuiBuilder {
     public String getGuiKeyByInventory(Player player, Inventory inventory) {
         Map<String, Inventory> guis = playerGuis.get(player.getUniqueId());
         if (guis == null) return null;
-
-        return guis.entrySet().stream()
-                .filter(entry -> entry.getValue().equals(inventory))
-                .map(Map.Entry::getKey)
-                .findFirst().orElse(null);
+        return guis.entrySet().stream().filter(entry -> entry.getValue().equals(inventory)).map(Map.Entry::getKey).findFirst().orElse(null);
     }
 }

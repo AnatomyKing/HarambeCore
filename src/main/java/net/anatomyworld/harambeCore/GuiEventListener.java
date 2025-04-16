@@ -2,6 +2,7 @@ package net.anatomyworld.harambeCore;
 
 import net.anatomyworld.harambeCore.GuiBuilder.SlotType;
 import net.anatomyworld.harambeCore.item.ItemRegistry;
+import net.anatomyworld.harambeCore.util.EconomyHandler;
 import net.anatomyworld.harambeCore.util.RecipeBookUtils;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -41,17 +42,33 @@ public class GuiEventListener implements Listener {
         SlotType slotType = slotTypes.get(clickedSlot);
         if (slotType == null) return;
 
+        double cost = guiBuilder.getSlotCosts(guiKey).getOrDefault(clickedSlot, 0.0);
+
         switch (slotType) {
             case BUTTON -> {
                 event.setCancelled(true);
+                if (cost > 0 && !EconomyHandler.hasEnoughBalance(player, cost)) {
+                    player.sendMessage("§cYou need " + cost + " to click this.");
+                    return;
+                }
+                if (cost > 0 && !EconomyHandler.withdrawBalance(player, cost)) {
+                    player.sendMessage("§cPayment failed.");
+                    return;
+                }
                 guiBuilder.handleButtonClick(player, guiKey, clickedSlot);
             }
             case INPUT_SLOT -> {
-                // Allow interaction
+                if (cost > 0 && !EconomyHandler.hasEnoughBalance(player, cost)) {
+                    event.setCancelled(true);
+                    player.sendMessage("§cYou need " + cost + " to place an item here.");
+                    return;
+                }
+                if (cost > 0 && !EconomyHandler.withdrawBalance(player, cost)) {
+                    event.setCancelled(true);
+                    player.sendMessage("§cPayment failed.");
+                }
             }
-            case FILLER -> {
-                event.setCancelled(true);
-            }
+            case FILLER -> event.setCancelled(true);
         }
     }
 
