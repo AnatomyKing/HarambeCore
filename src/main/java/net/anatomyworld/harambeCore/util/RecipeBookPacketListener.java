@@ -1,13 +1,10 @@
-package net.anatomyworld.harambeCore;
+package net.anatomyworld.harambeCore.util;
 
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
-import net.anatomyworld.harambeCore.util.RecipeBookUtils;
-import net.minecraft.network.protocol.game.ClientboundRecipeBookSettingsPacket;
 import net.minecraft.network.protocol.game.ServerboundRecipeBookChangeSettingsPacket;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
-import net.minecraft.stats.RecipeBookSettings;
 import net.minecraft.world.inventory.RecipeBookType;
 import org.bukkit.Bukkit;
 import org.bukkit.craftbukkit.entity.CraftPlayer; // Adjust import for your MC version

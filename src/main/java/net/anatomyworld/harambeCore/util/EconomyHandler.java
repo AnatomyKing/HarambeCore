@@ -1,4 +1,4 @@
-package net.anatomyworld.harambeCore.item;
+package net.anatomyworld.harambeCore.util;
 
 import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;

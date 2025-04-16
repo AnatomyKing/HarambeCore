@@ -18,8 +18,13 @@ public class GuiBuilder {
 
     public enum SlotType {
         BUTTON,
-        STORAGE_SLOT,
+        INPUT_SLOT,
         FILLER
+    }
+
+    public enum ActionType {
+        COMMAND
+        // Future: CALLBACK, MESSAGE, etc.
     }
 
     private final Map<UUID, Map<String, Inventory>> playerGuis = new HashMap<>();
@@ -70,14 +75,9 @@ public class GuiBuilder {
         String title = guiSection.getString("title", "&cUnnamed GUI");
         int size = guiSection.getInt("size", 54);
 
-        Component titleComponent;
-
-        if (title.contains("§") || title.contains("&")) {
-            titleComponent = LegacyComponentSerializer.legacySection().deserialize(title);
-        } else {
-            titleComponent = Component.text(title);
-        }
-
+        Component titleComponent = title.contains("§") || title.contains("&")
+                ? LegacyComponentSerializer.legacySection().deserialize(title)
+                : Component.text(title);
 
         Inventory gui = Bukkit.createInventory(null, size, titleComponent);
         Map<Integer, SlotType> slotTypes = new HashMap<>();
@@ -90,34 +90,51 @@ public class GuiBuilder {
                 if (buttonConfig == null) continue;
 
                 List<Integer> slots = buttonConfig.getIntegerList("slot");
+                String type = buttonConfig.getString("type", "FILLER").toUpperCase(Locale.ROOT);
 
-                if (buttonKey.endsWith("_slot")) {
-                    for (int slot : slots) {
-                        slotTypes.put(slot, SlotType.STORAGE_SLOT);
-                    }
+                SlotType slotType;
+                try {
+                    slotType = SlotType.valueOf(type);
+                } catch (IllegalArgumentException e) {
                     continue;
                 }
 
-                // Handle _button types
-                String materialName = buttonConfig.getString("material");
-                String itemName = buttonConfig.getString("name", "&fButton");
-                int customModelData = buttonConfig.getInt("custom_model_data", 0);
-                String logicCommand = buttonConfig.getString("logic");
+                switch (slotType) {
+                    case INPUT_SLOT -> slots.forEach(slot -> slotTypes.put(slot, SlotType.INPUT_SLOT));
+                    case BUTTON -> {
+                        ActionType actionType;
+                        try {
+                            actionType = ActionType.valueOf(buttonConfig.getString("action", "COMMAND").toUpperCase());
+                        } catch (IllegalArgumentException e) {
+                            continue;
+                        }
 
-                ItemStack item = createButtonItem(materialName, itemName, customModelData);
-                if (item == null) continue;
+                        String logicCommand = buttonConfig.getString("logic");
+                        ConfigurationSection design = buttonConfig.getConfigurationSection("design");
+                        if (design == null) continue;
 
-                for (int slot : slots) {
-                    gui.setItem(slot, item);
-                    slotTypes.put(slot, SlotType.BUTTON);
-                    if (logicCommand != null && !logicCommand.isEmpty()) {
-                        buttonLogics.put(slot, logicCommand);
+                        String materialName = design.getString("material");
+                        String itemName = design.getString("name", "&fButton");
+                        int customModelData = design.getInt("custom_model_data", 0);
+
+                        ItemStack item = createButtonItem(materialName, itemName, customModelData);
+                        if (item == null) continue;
+
+                        for (int slot : slots) {
+                            gui.setItem(slot, item);
+                            slotTypes.put(slot, SlotType.BUTTON);
+
+                            if (actionType == ActionType.COMMAND && logicCommand != null && !logicCommand.isEmpty()) {
+                                buttonLogics.put(slot, logicCommand);
+                            }
+                        }
+                    }
+                    default -> {
                     }
                 }
             }
         }
 
-        // Fill empty slots with filler item
         for (int i = 0; i < size; i++) {
             if (!slotTypes.containsKey(i)) {
                 gui.setItem(i, cachedFillerItem);

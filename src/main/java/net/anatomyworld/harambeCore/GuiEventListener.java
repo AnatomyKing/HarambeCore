@@ -3,8 +3,6 @@ package net.anatomyworld.harambeCore;
 import net.anatomyworld.harambeCore.GuiBuilder.SlotType;
 import net.anatomyworld.harambeCore.item.ItemRegistry;
 import net.anatomyworld.harambeCore.util.RecipeBookUtils;
-import net.minecraft.world.inventory.MenuType;
-import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -12,7 +10,6 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.ItemStack;
 
 import java.util.Map;
 
@@ -24,30 +21,18 @@ public class GuiEventListener implements Listener {
         this.guiBuilder = guiBuilder;
     }
 
-
-    @EventHandler
-    public void onInventoryClose(InventoryCloseEvent event) {
-        if (!(event.getPlayer() instanceof Player player)) return;
-
-        if (event.getInventory().getType() == InventoryType.WORKBENCH) {
-            RecipeBookUtils.forceCloseClientRecipeBook(player);
-        }
-    }
-
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
-
         Inventory clickedInventory = event.getClickedInventory();
         if (clickedInventory == null) return;
 
         String guiKey = guiBuilder.getGuiKeyByInventory(player, event.getInventory());
-        if (guiKey == null) return; // Not our GUI
+        if (guiKey == null) return;
 
         int rawSlot = event.getRawSlot();
         int clickedSlot = event.getSlot();
 
-        // Allow interaction with player inventory
         if (rawSlot >= event.getInventory().getSize()) return;
 
         Map<Integer, SlotType> slotTypes = guiBuilder.getGuiSlotTypes().get(guiKey);
@@ -61,13 +46,22 @@ public class GuiEventListener implements Listener {
                 event.setCancelled(true);
                 guiBuilder.handleButtonClick(player, guiKey, clickedSlot);
             }
-            case STORAGE_SLOT -> {
-                // Allow storage interaction
+            case INPUT_SLOT -> {
+                // Allow interaction
             }
             case FILLER -> {
                 event.setCancelled(true);
             }
         }
+    }
 
+    @EventHandler
+    public void onInventoryClose(InventoryCloseEvent event) {
+        if (!(event.getPlayer() instanceof Player player)) return;
+
+        if (event.getInventory().getType() == InventoryType.WORKBENCH) {
+            RecipeBookUtils.forceCloseClientRecipeBook(player);
+        }
     }
 }
+
