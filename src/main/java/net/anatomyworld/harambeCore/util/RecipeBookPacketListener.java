@@ -67,30 +67,22 @@ public class RecipeBookPacketListener implements Listener {
             @Override
             public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
                 if (msg instanceof ServerboundRecipeBookChangeSettingsPacket packet) {
-                    // Check if it's the crafting recipe book
-                    if (packet.getBookType() == RecipeBookType.CRAFTING) {
-                        // Also verify they're in their normal inventory, if you want
-                        if (player.getOpenInventory().getType() == InventoryType.CRAFTING) {
-                            // Run your custom logic on the main thread
-                            Bukkit.getScheduler().runTask(plugin, () -> {
-                                // 1) Perform your command from config
+                    if (packet.getBookType() == RecipeBookType.CRAFTING &&
+                            player.getOpenInventory().getType() == InventoryType.CRAFTING) {
+
+                        new org.bukkit.scheduler.BukkitRunnable() {
+                            @Override
+                            public void run() {
                                 player.performCommand(recipeBookCommand);
-
-                                // 2) Force the client to close the *crafting* recipe book
                                 RecipeBookUtils.forceCloseClientRecipeBook(player);
-
-
-                                // 3) Optionally refresh their inventory
                                 player.updateInventory();
-                            });
+                            }
+                        }.runTask(plugin);
 
-                            // Stop further processing
-                            return;
-                        }
+                        return;
                     }
                 }
 
-                // Otherwise, pass it on normally
                 super.channelRead(ctx, msg);
             }
         });
