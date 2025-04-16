@@ -30,6 +30,7 @@ public class GuiBuilder {
     private final Map<String, Map<Integer, SlotType>> guiSlotTypes = new HashMap<>();
     private final Map<String, Map<Integer, String>> buttonLogicCache = new HashMap<>();
     private final Map<String, Map<Integer, Double>> guiSlotCosts = new HashMap<>();
+    private final Map<String, Map<Integer, String>> guiAcceptedItems = new HashMap<>();
 
     private FileConfiguration config;
     private ItemStack cachedFillerItem;
@@ -45,6 +46,10 @@ public class GuiBuilder {
 
     public Map<Integer, Double> getSlotCosts(String guiKey) {
         return guiSlotCosts.getOrDefault(guiKey, Collections.emptyMap());
+    }
+
+    public Map<Integer, String> getAcceptedItems(String guiKey) {
+        return guiAcceptedItems.getOrDefault(guiKey, Collections.emptyMap());
     }
 
     public void updateConfig(FileConfiguration config) {
@@ -88,6 +93,7 @@ public class GuiBuilder {
         Map<Integer, SlotType> slotTypes = new HashMap<>();
         Map<Integer, String> buttonLogics = new HashMap<>();
         Map<Integer, Double> slotCosts = new HashMap<>();
+        Map<Integer, String> acceptedItems = new HashMap<>();
 
         ConfigurationSection buttonsSection = guiSection.getConfigurationSection("buttons");
         if (buttonsSection != null) {
@@ -108,11 +114,17 @@ public class GuiBuilder {
 
                 switch (slotType) {
                     case INPUT_SLOT -> {
+                        String accepted = buttonConfig.getString("accepted_item");
+
                         for (int slot : slots) {
                             slotTypes.put(slot, SlotType.INPUT_SLOT);
                             if (cost > 0) slotCosts.put(slot, cost);
+                            if (accepted != null && !accepted.isEmpty()) {
+                                acceptedItems.put(slot, accepted.toUpperCase(Locale.ROOT));
+                            }
                         }
                     }
+
                     case BUTTON -> {
                         ActionType actionType;
                         try {
@@ -141,6 +153,7 @@ public class GuiBuilder {
                             }
                         }
                     }
+
                     default -> {}
                 }
             }
@@ -156,6 +169,7 @@ public class GuiBuilder {
         guiSlotTypes.put(guiKey, slotTypes);
         buttonLogicCache.put(guiKey, buttonLogics);
         guiSlotCosts.put(guiKey, slotCosts);
+        guiAcceptedItems.put(guiKey, acceptedItems);
 
         return gui;
     }

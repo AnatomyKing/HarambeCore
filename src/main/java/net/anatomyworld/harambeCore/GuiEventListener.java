@@ -11,6 +11,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemStack;
 
 import java.util.Map;
 
@@ -63,9 +64,23 @@ public class GuiEventListener implements Listener {
                     player.sendMessage("§cYou need " + cost + " to place an item here.");
                     return;
                 }
+
                 if (cost > 0 && !EconomyHandler.withdrawBalance(player, cost)) {
                     event.setCancelled(true);
                     player.sendMessage("§cPayment failed.");
+                    return;
+                }
+
+                // Accepted item logic
+                Map<Integer, String> acceptedItems = guiBuilder.getAcceptedItems(guiKey);
+                String acceptedItem = acceptedItems.get(clickedSlot);
+
+                if (acceptedItem != null && !acceptedItem.isEmpty()) {
+                    ItemStack cursorItem = event.getCursor();
+                    if (cursorItem == null || !cursorItem.getType().name().equalsIgnoreCase(acceptedItem)) {
+                        event.setCancelled(true);
+                        player.sendMessage("§cOnly " + acceptedItem + " is allowed in this slot.");
+                    }
                 }
             }
             case FILLER -> event.setCancelled(true);
@@ -81,4 +96,3 @@ public class GuiEventListener implements Listener {
         }
     }
 }
-

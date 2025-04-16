@@ -24,6 +24,7 @@ gui:
       deposit_slot:
         slot: [13]
         type: INPUT_SLOT
+        accepted_item: GOLD_INGOT
         cost: 10
 
 
