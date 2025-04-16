@@ -23,7 +23,13 @@ public class GuiBuilder {
     }
 
     public enum ActionType {
-        COMMAND
+        COMMAND,
+        GIVE
+    }
+
+    public enum InputActionType {
+        NONE,
+        CONSUME
     }
 
     private final Map<UUID, Map<String, Inventory>> playerGuis = new HashMap<>();
@@ -31,6 +37,9 @@ public class GuiBuilder {
     private final Map<String, Map<Integer, String>> buttonLogicCache = new HashMap<>();
     private final Map<String, Map<Integer, Double>> guiSlotCosts = new HashMap<>();
     private final Map<String, Map<Integer, String>> guiAcceptedItems = new HashMap<>();
+    private final Map<String, Map<Integer, String>> guiOutputItems = new HashMap<>();
+    private final Map<String, Map<Integer, Integer>> guiPayoutAmounts = new HashMap<>();
+    private final Map<String, Map<Integer, InputActionType>> guiInputActions = new HashMap<>();
 
     private FileConfiguration config;
     private ItemStack cachedFillerItem;
@@ -52,12 +61,28 @@ public class GuiBuilder {
         return guiAcceptedItems.getOrDefault(guiKey, Collections.emptyMap());
     }
 
+    public Map<Integer, String> getOutputItems(String guiKey) {
+        return guiOutputItems.getOrDefault(guiKey, Collections.emptyMap());
+    }
+
+    public Map<Integer, Integer> getPayoutAmounts(String guiKey) {
+        return guiPayoutAmounts.getOrDefault(guiKey, Collections.emptyMap());
+    }
+
+    public Map<Integer, InputActionType> getInputActions(String guiKey) {
+        return guiInputActions.getOrDefault(guiKey, Collections.emptyMap());
+    }
+
     public void updateConfig(FileConfiguration config) {
         this.config = config;
         playerGuis.clear();
         guiSlotTypes.clear();
         buttonLogicCache.clear();
         guiSlotCosts.clear();
+        guiAcceptedItems.clear();
+        guiOutputItems.clear();
+        guiPayoutAmounts.clear();
+        guiInputActions.clear();
         this.cachedFillerItem = createFillerItem();
     }
 
@@ -94,6 +119,9 @@ public class GuiBuilder {
         Map<Integer, String> buttonLogics = new HashMap<>();
         Map<Integer, Double> slotCosts = new HashMap<>();
         Map<Integer, String> acceptedItems = new HashMap<>();
+        Map<Integer, String> outputItems = new HashMap<>();
+        Map<Integer, Integer> payoutAmounts = new HashMap<>();
+        Map<Integer, InputActionType> inputActions = new HashMap<>();
 
         ConfigurationSection buttonsSection = guiSection.getConfigurationSection("buttons");
         if (buttonsSection != null) {
@@ -115,6 +143,14 @@ public class GuiBuilder {
                 switch (slotType) {
                     case INPUT_SLOT -> {
                         String accepted = buttonConfig.getString("accepted_item");
+                        String actionString = buttonConfig.getString("action", "NONE").toUpperCase(Locale.ROOT);
+
+                        InputActionType inputAction;
+                        try {
+                            inputAction = InputActionType.valueOf(actionString);
+                        } catch (IllegalArgumentException e) {
+                            inputAction = InputActionType.NONE;
+                        }
 
                         for (int slot : slots) {
                             slotTypes.put(slot, SlotType.INPUT_SLOT);
@@ -122,6 +158,7 @@ public class GuiBuilder {
                             if (accepted != null && !accepted.isEmpty()) {
                                 acceptedItems.put(slot, accepted.toUpperCase(Locale.ROOT));
                             }
+                            inputActions.put(slot, inputAction);
                         }
                     }
 
@@ -134,6 +171,8 @@ public class GuiBuilder {
                         }
 
                         String logicCommand = buttonConfig.getString("logic");
+                        String outputItem = buttonConfig.getString("output_item");
+                        int payoutAmount = buttonConfig.getInt("payout_amount", 1);
                         ConfigurationSection design = buttonConfig.getConfigurationSection("design");
                         if (design == null) continue;
 
@@ -148,8 +187,19 @@ public class GuiBuilder {
                             gui.setItem(slot, item);
                             slotTypes.put(slot, SlotType.BUTTON);
                             if (cost > 0) slotCosts.put(slot, cost);
-                            if (actionType == ActionType.COMMAND && logicCommand != null && !logicCommand.isEmpty()) {
-                                buttonLogics.put(slot, logicCommand);
+
+                            switch (actionType) {
+                                case COMMAND -> {
+                                    if (logicCommand != null && !logicCommand.isEmpty()) {
+                                        buttonLogics.put(slot, logicCommand);
+                                    }
+                                }
+                                case GIVE -> {
+                                    if (outputItem != null && !outputItem.isEmpty()) {
+                                        outputItems.put(slot, outputItem.toUpperCase(Locale.ROOT));
+                                        payoutAmounts.put(slot, Math.max(1, payoutAmount));
+                                    }
+                                }
                             }
                         }
                     }
@@ -170,6 +220,9 @@ public class GuiBuilder {
         buttonLogicCache.put(guiKey, buttonLogics);
         guiSlotCosts.put(guiKey, slotCosts);
         guiAcceptedItems.put(guiKey, acceptedItems);
+        guiOutputItems.put(guiKey, outputItems);
+        guiPayoutAmounts.put(guiKey, payoutAmounts);
+        guiInputActions.put(guiKey, inputActions);
 
         return gui;
     }
@@ -202,9 +255,26 @@ public class GuiBuilder {
     }
 
     public void handleButtonClick(Player player, String guiKey, int slot) {
-        String command = buttonLogicCache.getOrDefault(guiKey, Collections.emptyMap()).get(slot);
-        if (command != null && !command.isEmpty()) {
-            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command.replace("%player%", player.getName()));
+        Map<Integer, String> logics = buttonLogicCache.getOrDefault(guiKey, Collections.emptyMap());
+        Map<Integer, String> outputs = guiOutputItems.getOrDefault(guiKey, Collections.emptyMap());
+        Map<Integer, Integer> payouts = guiPayoutAmounts.getOrDefault(guiKey, Collections.emptyMap());
+
+        if (logics.containsKey(slot)) {
+            String command = logics.get(slot);
+            if (command != null && !command.isEmpty()) {
+                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command.replace("%player%", player.getName()));
+            }
+        } else if (outputs.containsKey(slot)) {
+            String materialName = outputs.get(slot);
+            Material mat = Material.matchMaterial(materialName);
+            if (mat != null) {
+                int amount = payouts.getOrDefault(slot, 1);
+                ItemStack item = new ItemStack(mat, amount);
+                player.getInventory().addItem(item);
+                player.sendMessage("§aYou received " + amount + " " + materialName + "!");
+            } else {
+                player.sendMessage("§cInvalid output item configured.");
+            }
         }
     }
 

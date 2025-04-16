@@ -4,6 +4,7 @@ import net.anatomyworld.harambeCore.GuiBuilder.SlotType;
 import net.anatomyworld.harambeCore.item.ItemRegistry;
 import net.anatomyworld.harambeCore.util.EconomyHandler;
 import net.anatomyworld.harambeCore.util.RecipeBookUtils;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -12,7 +13,9 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.Locale;
 import java.util.Map;
 
 public class GuiEventListener implements Listener {
@@ -58,6 +61,7 @@ public class GuiEventListener implements Listener {
                 }
                 guiBuilder.handleButtonClick(player, guiKey, clickedSlot);
             }
+
             case INPUT_SLOT -> {
                 if (cost > 0 && !EconomyHandler.hasEnoughBalance(player, cost)) {
                     event.setCancelled(true);
@@ -71,7 +75,6 @@ public class GuiEventListener implements Listener {
                     return;
                 }
 
-                // Accepted item logic
                 Map<Integer, String> acceptedItems = guiBuilder.getAcceptedItems(guiKey);
                 String acceptedItem = acceptedItems.get(clickedSlot);
 
@@ -80,9 +83,28 @@ public class GuiEventListener implements Listener {
                     if (cursorItem == null || !cursorItem.getType().name().equalsIgnoreCase(acceptedItem)) {
                         event.setCancelled(true);
                         player.sendMessage("§cOnly " + acceptedItem + " is allowed in this slot.");
+                        return;
                     }
                 }
+
+                Map<Integer, GuiBuilder.InputActionType> inputActions = guiBuilder.getInputActions(guiKey);
+                GuiBuilder.InputActionType action = inputActions.getOrDefault(clickedSlot, GuiBuilder.InputActionType.NONE);
+
+                if (action == GuiBuilder.InputActionType.CONSUME) {
+                    ItemStack cursorItem = event.getCursor();
+                    if (cursorItem != null && cursorItem.getAmount() > 0) {
+                        cursorItem.setAmount(cursorItem.getAmount() - 1);
+                        ItemStack newCursor = cursorItem.getAmount() > 0 ? cursorItem : null;
+
+                        Bukkit.getScheduler().runTask(JavaPlugin.getPlugin(HarambeCore.class), () -> player.setItemOnCursor(newCursor));
+
+                        player.sendMessage("§eConsumed one " + cursorItem.getType().name().toLowerCase(Locale.ROOT).replace("_", " ") + ".");
+                    }
+
+                    event.setCancelled(true);
+                }
             }
+
             case FILLER -> event.setCancelled(true);
         }
     }

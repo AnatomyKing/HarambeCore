@@ -6,7 +6,7 @@ filler:
 gui:
 
 
-  shop:
+  banana:
     title: "&6Item Shop"
     size: 27
     buttons:
@@ -26,6 +26,25 @@ gui:
         type: INPUT_SLOT
         accepted_item: GOLD_INGOT
         cost: 10
+
+      atm_deposit_input:
+        slot: [10]
+        type: INPUT_SLOT
+        action: CONSUME
+        accepted_item: GOLD_INGOT
+        cost: 2
+
+      give_gold_button:
+        slot: [ 14 ]
+        type: BUTTON
+        action: GIVE
+        output_item: GOLD_INGOT
+        payout_amount: 10
+        cost: 100
+        design:
+          material: GOLD_INGOT
+          name: "&6Get Gold"
+          custom_model_data: 0
 
 
   # === GUI 1: Krobus ===
