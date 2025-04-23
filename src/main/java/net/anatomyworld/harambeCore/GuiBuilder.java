@@ -1,5 +1,3 @@
-// GuiBuilder.java
-
 package net.anatomyworld.harambeCore;
 
 import net.kyori.adventure.text.Component;
@@ -19,20 +17,15 @@ import java.util.*;
 public class GuiBuilder {
 
     public enum SlotType {
-        BUTTON,
-        INPUT_SLOT,
-        FILLER,
-        CHECK_BUTTON
+        BUTTON, INPUT_SLOT, FILLER, CHECK_BUTTON
     }
 
     public enum ActionType {
-        COMMAND,
-        GIVE
+        COMMAND, GIVE
     }
 
     public enum InputActionType {
-        NONE,
-        CONSUME
+        NONE, CONSUME
     }
 
     private final Map<UUID, Map<String, Inventory>> playerGuis = new HashMap<>();
@@ -204,7 +197,9 @@ public class GuiBuilder {
 
                             if (slotType == SlotType.CHECK_BUTTON) {
                                 if (checkItem != null) checkItems.put(slot, checkItem.toUpperCase(Locale.ROOT));
-                                if (!connectedSlots.isEmpty()) slotConnections.put(slot, connectedSlots);
+                                if (!connectedSlots.isEmpty()) {
+                                    slotConnections.put(slot, connectedSlots);
+                                }
                             }
                         }
                     }

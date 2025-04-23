@@ -91,14 +91,21 @@ public class GuiEventListener implements Listener {
                 Map<Integer, GuiBuilder.InputActionType> inputActions = guiBuilder.getInputActions(guiKey);
                 GuiBuilder.InputActionType action = inputActions.getOrDefault(clickedSlot, GuiBuilder.InputActionType.NONE);
 
-                if (action == GuiBuilder.InputActionType.CONSUME) {
+
+                boolean isLinked = guiBuilder.getSlotConnections(guiKey).values().stream()
+                        .anyMatch(list -> list.contains(clickedSlot));
+
+                if (action == GuiBuilder.InputActionType.CONSUME && !isLinked) {
                     ItemStack cursorItem = event.getCursor();
                     if (cursorItem != null && cursorItem.getAmount() > 0) {
                         cursorItem.setAmount(cursorItem.getAmount() - 1);
                         ItemStack newCursor = cursorItem.getAmount() > 0 ? cursorItem : null;
 
-                        Bukkit.getScheduler().runTask(JavaPlugin.getPlugin(HarambeCore.class), () -> player.setItemOnCursor(newCursor));
-                        player.sendMessage("§eConsumed one " + cursorItem.getType().name().toLowerCase(Locale.ROOT).replace("_", " ") + ".");
+                        Bukkit.getScheduler().runTask(JavaPlugin.getPlugin(HarambeCore.class),
+                                () -> player.setItemOnCursor(newCursor));
+
+                        player.sendMessage("§eConsumed one " +
+                                cursorItem.getType().name().toLowerCase(Locale.ROOT).replace("_", " ") + ".");
                     }
 
                     event.setCancelled(true);
@@ -118,6 +125,7 @@ public class GuiEventListener implements Listener {
 
                 Map<Integer, String> checkItems = guiBuilder.getCheckItems(guiKey);
                 Map<Integer, List<Integer>> slotConnections = guiBuilder.getSlotConnections(guiKey);
+                Map<Integer, GuiBuilder.InputActionType> inputActions = guiBuilder.getInputActions(guiKey);
 
                 String requiredMaterial = checkItems.get(clickedSlot);
                 List<Integer> checkSlots = slotConnections.get(clickedSlot);
@@ -131,6 +139,21 @@ public class GuiEventListener implements Listener {
                 }
 
                 if (match) {
+
+                    for (int slot : checkSlots) {
+                        if (inputActions.getOrDefault(slot, GuiBuilder.InputActionType.NONE) == GuiBuilder.InputActionType.CONSUME) {
+                            ItemStack item = event.getInventory().getItem(slot);
+                            if (item != null) {
+                                int newAmount = item.getAmount() - 1;
+                                if (newAmount > 0) {
+                                    item.setAmount(newAmount);
+                                } else {
+                                    event.getInventory().setItem(slot, null);
+                                }
+                            }
+                        }
+                    }
+
                     guiBuilder.handleButtonClick(player, guiKey, clickedSlot);
                 } else {
                     player.sendMessage("§cCheck failed. Required item not found in input slots.");
