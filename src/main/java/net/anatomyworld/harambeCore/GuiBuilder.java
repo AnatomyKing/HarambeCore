@@ -1,3 +1,5 @@
+// GuiBuilder.java
+
 package net.anatomyworld.harambeCore;
 
 import net.kyori.adventure.text.Component;
@@ -19,7 +21,8 @@ public class GuiBuilder {
     public enum SlotType {
         BUTTON,
         INPUT_SLOT,
-        FILLER
+        FILLER,
+        CHECK_BUTTON
     }
 
     public enum ActionType {
@@ -40,6 +43,8 @@ public class GuiBuilder {
     private final Map<String, Map<Integer, String>> guiOutputItems = new HashMap<>();
     private final Map<String, Map<Integer, Integer>> guiPayoutAmounts = new HashMap<>();
     private final Map<String, Map<Integer, InputActionType>> guiInputActions = new HashMap<>();
+    private final Map<String, Map<Integer, List<Integer>>> guiSlotConnections = new HashMap<>();
+    private final Map<String, Map<Integer, String>> guiCheckItems = new HashMap<>();
 
     private FileConfiguration config;
     private ItemStack cachedFillerItem;
@@ -73,6 +78,14 @@ public class GuiBuilder {
         return guiInputActions.getOrDefault(guiKey, Collections.emptyMap());
     }
 
+    public Map<Integer, List<Integer>> getSlotConnections(String guiKey) {
+        return guiSlotConnections.getOrDefault(guiKey, Collections.emptyMap());
+    }
+
+    public Map<Integer, String> getCheckItems(String guiKey) {
+        return guiCheckItems.getOrDefault(guiKey, Collections.emptyMap());
+    }
+
     public void updateConfig(FileConfiguration config) {
         this.config = config;
         playerGuis.clear();
@@ -83,6 +96,8 @@ public class GuiBuilder {
         guiOutputItems.clear();
         guiPayoutAmounts.clear();
         guiInputActions.clear();
+        guiSlotConnections.clear();
+        guiCheckItems.clear();
         this.cachedFillerItem = createFillerItem();
     }
 
@@ -109,10 +124,7 @@ public class GuiBuilder {
 
         String title = guiSection.getString("title", "&cUnnamed GUI");
         int size = guiSection.getInt("size", 54);
-
-        Component titleComponent = title.contains("§") || title.contains("&")
-                ? LegacyComponentSerializer.legacySection().deserialize(title)
-                : Component.text(title);
+        Component titleComponent = LegacyComponentSerializer.legacySection().deserialize(title);
 
         Inventory gui = Bukkit.createInventory(null, size, titleComponent);
         Map<Integer, SlotType> slotTypes = new HashMap<>();
@@ -122,6 +134,8 @@ public class GuiBuilder {
         Map<Integer, String> outputItems = new HashMap<>();
         Map<Integer, Integer> payoutAmounts = new HashMap<>();
         Map<Integer, InputActionType> inputActions = new HashMap<>();
+        Map<Integer, List<Integer>> slotConnections = new HashMap<>();
+        Map<Integer, String> checkItems = new HashMap<>();
 
         ConfigurationSection buttonsSection = guiSection.getConfigurationSection("buttons");
         if (buttonsSection != null) {
@@ -143,36 +157,28 @@ public class GuiBuilder {
                 switch (slotType) {
                     case INPUT_SLOT -> {
                         String accepted = buttonConfig.getString("accepted_item");
-                        String actionString = buttonConfig.getString("action", "NONE").toUpperCase(Locale.ROOT);
-
-                        InputActionType inputAction;
-                        try {
-                            inputAction = InputActionType.valueOf(actionString);
-                        } catch (IllegalArgumentException e) {
-                            inputAction = InputActionType.NONE;
-                        }
-
+                        InputActionType inputAction = InputActionType.valueOf(buttonConfig.getString("action", "NONE").toUpperCase(Locale.ROOT));
                         for (int slot : slots) {
                             slotTypes.put(slot, SlotType.INPUT_SLOT);
                             if (cost > 0) slotCosts.put(slot, cost);
-                            if (accepted != null && !accepted.isEmpty()) {
-                                acceptedItems.put(slot, accepted.toUpperCase(Locale.ROOT));
-                            }
+                            if (accepted != null && !accepted.isEmpty()) acceptedItems.put(slot, accepted.toUpperCase(Locale.ROOT));
                             inputActions.put(slot, inputAction);
                         }
                     }
 
-                    case BUTTON -> {
-                        ActionType actionType;
-                        try {
-                            actionType = ActionType.valueOf(buttonConfig.getString("action", "COMMAND").toUpperCase());
-                        } catch (IllegalArgumentException e) {
-                            continue;
-                        }
-
+                    case BUTTON, CHECK_BUTTON -> {
+                        ActionType actionType = ActionType.valueOf(buttonConfig.getString("action", "COMMAND").toUpperCase(Locale.ROOT));
                         String logicCommand = buttonConfig.getString("logic");
                         String outputItem = buttonConfig.getString("output_item");
                         int payoutAmount = buttonConfig.getInt("payout_amount", 1);
+                        String checkItem = buttonConfig.getString("check_item");
+                        String connectionKey = buttonConfig.getString("slot_connection");
+
+                        List<Integer> connectedSlots = new ArrayList<>();
+                        if (connectionKey != null && buttonsSection.isConfigurationSection(connectionKey)) {
+                            connectedSlots = Objects.requireNonNull(buttonsSection.getConfigurationSection(connectionKey)).getIntegerList("slot");
+                        }
+
                         ConfigurationSection design = buttonConfig.getConfigurationSection("design");
                         if (design == null) continue;
 
@@ -185,21 +191,20 @@ public class GuiBuilder {
 
                         for (int slot : slots) {
                             gui.setItem(slot, item);
-                            slotTypes.put(slot, SlotType.BUTTON);
+                            slotTypes.put(slot, slotType);
                             if (cost > 0) slotCosts.put(slot, cost);
 
-                            switch (actionType) {
-                                case COMMAND -> {
-                                    if (logicCommand != null && !logicCommand.isEmpty()) {
-                                        buttonLogics.put(slot, logicCommand);
-                                    }
-                                }
-                                case GIVE -> {
-                                    if (outputItem != null && !outputItem.isEmpty()) {
-                                        outputItems.put(slot, outputItem.toUpperCase(Locale.ROOT));
-                                        payoutAmounts.put(slot, Math.max(1, payoutAmount));
-                                    }
-                                }
+                            if (actionType == ActionType.COMMAND && logicCommand != null) {
+                                buttonLogics.put(slot, logicCommand);
+                            }
+                            if (actionType == ActionType.GIVE && outputItem != null) {
+                                outputItems.put(slot, outputItem.toUpperCase(Locale.ROOT));
+                                payoutAmounts.put(slot, Math.max(1, payoutAmount));
+                            }
+
+                            if (slotType == SlotType.CHECK_BUTTON) {
+                                if (checkItem != null) checkItems.put(slot, checkItem.toUpperCase(Locale.ROOT));
+                                if (!connectedSlots.isEmpty()) slotConnections.put(slot, connectedSlots);
                             }
                         }
                     }
@@ -223,6 +228,8 @@ public class GuiBuilder {
         guiOutputItems.put(guiKey, outputItems);
         guiPayoutAmounts.put(guiKey, payoutAmounts);
         guiInputActions.put(guiKey, inputActions);
+        guiCheckItems.put(guiKey, checkItems);
+        guiSlotConnections.put(guiKey, slotConnections);
 
         return gui;
     }
@@ -261,19 +268,11 @@ public class GuiBuilder {
 
         if (logics.containsKey(slot)) {
             String command = logics.get(slot);
-            if (command != null && !command.isEmpty()) {
-                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command.replace("%player%", player.getName()));
-            }
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command.replace("%player%", player.getName()));
         } else if (outputs.containsKey(slot)) {
-            String materialName = outputs.get(slot);
-            Material mat = Material.matchMaterial(materialName);
+            Material mat = Material.matchMaterial(outputs.get(slot));
             if (mat != null) {
-                int amount = payouts.getOrDefault(slot, 1);
-                ItemStack item = new ItemStack(mat, amount);
-                player.getInventory().addItem(item);
-                player.sendMessage("§aYou received " + amount + " " + materialName + "!");
-            } else {
-                player.sendMessage("§cInvalid output item configured.");
+                player.getInventory().addItem(new ItemStack(mat, payouts.getOrDefault(slot, 1)));
             }
         }
     }

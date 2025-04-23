@@ -15,6 +15,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -97,11 +98,42 @@ public class GuiEventListener implements Listener {
                         ItemStack newCursor = cursorItem.getAmount() > 0 ? cursorItem : null;
 
                         Bukkit.getScheduler().runTask(JavaPlugin.getPlugin(HarambeCore.class), () -> player.setItemOnCursor(newCursor));
-
                         player.sendMessage("§eConsumed one " + cursorItem.getType().name().toLowerCase(Locale.ROOT).replace("_", " ") + ".");
                     }
 
                     event.setCancelled(true);
+                }
+            }
+
+            case CHECK_BUTTON -> {
+                event.setCancelled(true);
+                if (cost > 0 && !EconomyHandler.hasEnoughBalance(player, cost)) {
+                    player.sendMessage("§cYou need " + cost + " to use this.");
+                    return;
+                }
+                if (cost > 0 && !EconomyHandler.withdrawBalance(player, cost)) {
+                    player.sendMessage("§cPayment failed.");
+                    return;
+                }
+
+                Map<Integer, String> checkItems = guiBuilder.getCheckItems(guiKey);
+                Map<Integer, List<Integer>> slotConnections = guiBuilder.getSlotConnections(guiKey);
+
+                String requiredMaterial = checkItems.get(clickedSlot);
+                List<Integer> checkSlots = slotConnections.get(clickedSlot);
+
+                boolean match = false;
+                if (requiredMaterial != null && checkSlots != null && !checkSlots.isEmpty()) {
+                    match = checkSlots.stream().allMatch(slot -> {
+                        ItemStack item = event.getInventory().getItem(slot);
+                        return item != null && item.getType().name().equalsIgnoreCase(requiredMaterial);
+                    });
+                }
+
+                if (match) {
+                    guiBuilder.handleButtonClick(player, guiKey, clickedSlot);
+                } else {
+                    player.sendMessage("§cCheck failed. Required item not found in input slots.");
                 }
             }
 
