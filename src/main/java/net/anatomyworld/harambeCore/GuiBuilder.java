@@ -1,3 +1,5 @@
+// GuiBuilder.java
+
 package net.anatomyworld.harambeCore;
 
 import net.kyori.adventure.text.Component;
@@ -33,6 +35,8 @@ public class GuiBuilder {
     private final Map<String, Map<Integer, String>> buttonLogicCache = new HashMap<>();
     private final Map<String, Map<Integer, Double>> guiSlotCosts = new HashMap<>();
     private final Map<String, Map<Integer, String>> guiAcceptedItems = new HashMap<>();
+    private final Map<String, Map<Integer, Integer>> guiAcceptedAmounts = new HashMap<>();
+    private final Map<String, Map<Integer, Boolean>> guiCostPerStack = new HashMap<>();
     private final Map<String, Map<Integer, String>> guiOutputItems = new HashMap<>();
     private final Map<String, Map<Integer, Integer>> guiPayoutAmounts = new HashMap<>();
     private final Map<String, Map<Integer, InputActionType>> guiInputActions = new HashMap<>();
@@ -55,8 +59,16 @@ public class GuiBuilder {
         return guiSlotCosts.getOrDefault(guiKey, Collections.emptyMap());
     }
 
+    public Map<Integer, Boolean> getCostPerStack(String guiKey) {
+        return guiCostPerStack.getOrDefault(guiKey, Collections.emptyMap());
+    }
+
     public Map<Integer, String> getAcceptedItems(String guiKey) {
         return guiAcceptedItems.getOrDefault(guiKey, Collections.emptyMap());
+    }
+
+    public Map<Integer, Integer> getAcceptedAmounts(String guiKey) {
+        return guiAcceptedAmounts.getOrDefault(guiKey, Collections.emptyMap());
     }
 
     public Map<Integer, String> getOutputItems(String guiKey) {
@@ -85,7 +97,9 @@ public class GuiBuilder {
         guiSlotTypes.clear();
         buttonLogicCache.clear();
         guiSlotCosts.clear();
+        guiCostPerStack.clear();
         guiAcceptedItems.clear();
+        guiAcceptedAmounts.clear();
         guiOutputItems.clear();
         guiPayoutAmounts.clear();
         guiInputActions.clear();
@@ -123,7 +137,9 @@ public class GuiBuilder {
         Map<Integer, SlotType> slotTypes = new HashMap<>();
         Map<Integer, String> buttonLogics = new HashMap<>();
         Map<Integer, Double> slotCosts = new HashMap<>();
+        Map<Integer, Boolean> perStackMap = new HashMap<>();
         Map<Integer, String> acceptedItems = new HashMap<>();
+        Map<Integer, Integer> acceptedAmounts = new HashMap<>();
         Map<Integer, String> outputItems = new HashMap<>();
         Map<Integer, Integer> payoutAmounts = new HashMap<>();
         Map<Integer, InputActionType> inputActions = new HashMap<>();
@@ -138,7 +154,6 @@ public class GuiBuilder {
 
                 List<Integer> slots = buttonConfig.getIntegerList("slot");
                 String type = buttonConfig.getString("type", "FILLER").toUpperCase(Locale.ROOT);
-                double cost = buttonConfig.getDouble("cost", 0.0);
 
                 SlotType slotType;
                 try {
@@ -147,14 +162,36 @@ public class GuiBuilder {
                     continue;
                 }
 
+                double flatCost = 0.0;
+                boolean perStack = false;
+
+                if (buttonConfig.isConfigurationSection("cost")) {
+                    ConfigurationSection costSec = buttonConfig.getConfigurationSection("cost");
+                    flatCost = costSec.getDouble("eco", 0.0);
+                    perStack = costSec.getBoolean("per_stack", false);
+                } else {
+                    flatCost = buttonConfig.getDouble("cost", 0.0);
+                }
+
                 switch (slotType) {
                     case INPUT_SLOT -> {
-                        String accepted = buttonConfig.getString("accepted_item");
+                        ConfigurationSection accepted = buttonConfig.isConfigurationSection("accepted_item") ?
+                                buttonConfig.getConfigurationSection("accepted_item") : null;
+
+                        String acceptedMaterial = accepted != null ? accepted.getString("material") : buttonConfig.getString("accepted_item");
+                        int amount = accepted != null ? accepted.getInt("amount", -1) : -1;
+
                         InputActionType inputAction = InputActionType.valueOf(buttonConfig.getString("action", "NONE").toUpperCase(Locale.ROOT));
                         for (int slot : slots) {
                             slotTypes.put(slot, SlotType.INPUT_SLOT);
-                            if (cost > 0) slotCosts.put(slot, cost);
-                            if (accepted != null && !accepted.isEmpty()) acceptedItems.put(slot, accepted.toUpperCase(Locale.ROOT));
+                            if (flatCost > 0) slotCosts.put(slot, flatCost);
+                            if (perStack) perStackMap.put(slot, true);
+                            if (acceptedMaterial != null && !acceptedMaterial.isEmpty()) {
+                                acceptedItems.put(slot, acceptedMaterial.toUpperCase(Locale.ROOT));
+                            }
+                            if (amount > 0) {
+                                acceptedAmounts.put(slot, amount);
+                            }
                             inputActions.put(slot, inputAction);
                         }
                     }
@@ -185,7 +222,8 @@ public class GuiBuilder {
                         for (int slot : slots) {
                             gui.setItem(slot, item);
                             slotTypes.put(slot, slotType);
-                            if (cost > 0) slotCosts.put(slot, cost);
+                            if (flatCost > 0) slotCosts.put(slot, flatCost);
+                            if (perStack) perStackMap.put(slot, true);
 
                             if (actionType == ActionType.COMMAND && logicCommand != null) {
                                 buttonLogics.put(slot, logicCommand);
@@ -197,9 +235,7 @@ public class GuiBuilder {
 
                             if (slotType == SlotType.CHECK_BUTTON) {
                                 if (checkItem != null) checkItems.put(slot, checkItem.toUpperCase(Locale.ROOT));
-                                if (!connectedSlots.isEmpty()) {
-                                    slotConnections.put(slot, connectedSlots);
-                                }
+                                if (!connectedSlots.isEmpty()) slotConnections.put(slot, connectedSlots);
                             }
                         }
                     }
@@ -219,7 +255,9 @@ public class GuiBuilder {
         guiSlotTypes.put(guiKey, slotTypes);
         buttonLogicCache.put(guiKey, buttonLogics);
         guiSlotCosts.put(guiKey, slotCosts);
+        guiCostPerStack.put(guiKey, perStackMap);
         guiAcceptedItems.put(guiKey, acceptedItems);
+        guiAcceptedAmounts.put(guiKey, acceptedAmounts);
         guiOutputItems.put(guiKey, outputItems);
         guiPayoutAmounts.put(guiKey, payoutAmounts);
         guiInputActions.put(guiKey, inputActions);
