@@ -156,6 +156,12 @@ public class GuiEventListener implements Listener {
                     return;
                 }
 
+                // CHARGE AFTER VALIDATION
+                if (fee > 0 && !EconomyHandler.withdrawBalance(p, fee)) {
+                    p.sendMessage("§cYou need " + fee);
+                    return;
+                }
+
                 for (int s : connected) {
                     ItemStack it = e.getInventory().getItem(s);
                     if (it != null) rewardHandler.queueReward(p.getUniqueId(), it);
