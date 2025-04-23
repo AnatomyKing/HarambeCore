@@ -1,6 +1,7 @@
 package net.anatomyworld.harambeCore.item;
 
 import org.bukkit.configuration.file.YamlConfiguration;
+
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
@@ -17,11 +18,9 @@ public class PlayerRewardData {
 
     public void addReward(UUID player, String group, String rewardId) {
         List<String> list = config.getStringList(player.toString() + ".collect." + group);
-        if (!list.contains(rewardId)) {
-            list.add(rewardId);
-            config.set(player + ".collect." + group, list);
-            save();
-        }
+        list.add(rewardId); // ALLOW DUPLICATES
+        config.set(player + ".collect." + group, list);
+        save();
     }
 
     public List<String> getAllRewards(UUID player, String group) {
@@ -30,8 +29,8 @@ public class PlayerRewardData {
 
     public void removeReward(UUID player, String group, String rewardId) {
         List<String> list = config.getStringList(player.toString() + ".collect." + group);
-        list.remove(rewardId);
-        config.set(player + ".collect." + group, list);
+        list.remove(rewardId); // Removes one instance only
+        config.set(player.toString() + ".collect." + group, list);
         save();
     }
 
