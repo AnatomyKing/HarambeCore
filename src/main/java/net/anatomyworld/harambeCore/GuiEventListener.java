@@ -9,9 +9,7 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryCloseEvent;
-import org.bukkit.event.inventory.InventoryType;
+import org.bukkit.event.inventory.*;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -36,6 +34,13 @@ public class GuiEventListener implements Listener {
 
         String guiKey = guiBuilder.getGuiKeyByInventory(player, event.getInventory());
         if (guiKey == null) return;
+
+        // Block shift-clicks
+        if (event.getClick() == ClickType.SHIFT_LEFT || event.getClick() == ClickType.SHIFT_RIGHT) {
+            event.setCancelled(true);
+            player.sendMessage("§cShift-clicking is disabled in this GUI.");
+            return;
+        }
 
         int rawSlot = event.getRawSlot();
         int clickedSlot = event.getSlot();
@@ -177,6 +182,19 @@ public class GuiEventListener implements Listener {
     }
 
     @EventHandler
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+
+        String guiKey = guiBuilder.getGuiKeyByInventory(player, event.getInventory());
+        if (guiKey == null) return;
+
+        event.setCancelled(true);
+        player.sendMessage("§cDragging items is disabled in this GUI.");
+    }
+
+
+
+@EventHandler
     public void onInventoryClose(InventoryCloseEvent event) {
         if (!(event.getPlayer() instanceof Player player)) return;
 
