@@ -4,6 +4,7 @@ import net.anatomyworld.harambeCore.GuiBuilder.InputActionType;
 import net.anatomyworld.harambeCore.GuiBuilder.SlotType;
 import net.anatomyworld.harambeCore.item.ItemRegistry;
 import net.anatomyworld.harambeCore.item.RewardHandler;
+import net.anatomyworld.harambeCore.item.RewardGroupManager;
 import net.anatomyworld.harambeCore.util.EconomyHandler;
 import net.anatomyworld.harambeCore.util.RecipeBookUtils;
 import org.bukkit.Material;
@@ -95,26 +96,24 @@ public class GuiEventListener implements Listener {
                     }
                 }
 
+                if (groupMap.containsKey(slot)) {
+                    String expectedGroup = groupMap.get(slot);
+                    String key = resolveKey(cur);
+                    RewardGroupManager.RewardEntry entry = rewardHandler.getRewardGroupManager().getEntryForItem(key);
+                    if (entry == null || !entry.groupName().equals(expectedGroup)) {
+                        e.setCancelled(true);
+                        p.sendMessage("§cThis item is not allowed in this slot.");
+                        return;
+                    }
+                }
+
                 if (amounts.containsKey(slot) && cur.getAmount() != amounts.get(slot)) {
                     e.setCancelled(true);
                     p.sendMessage("§cYou must place exactly " + amounts.get(slot));
                     return;
                 }
 
-                boolean linked = conn.values().stream().anyMatch(l -> l.contains(slot));
-                if (actions.getOrDefault(slot, InputActionType.NONE) == InputActionType.CONSUME && !linked) {
-                    double base = costs.getOrDefault(slot, 0.0);
-                    int amt = cur.getAmount();
-                    double fee = perStack.getOrDefault(slot, false) ? base * amt : base;
-                    if (!EconomyHandler.withdrawBalance(p, fee)) {
-                        e.setCancelled(true);
-                        p.sendMessage("§cYou need " + fee);
-                        return;
-                    }
-                    int toRemove = perStack.getOrDefault(slot, false) ? amt : 1;
-                    cur.setAmount(cur.getAmount() - toRemove);
-                    if (cur.getAmount() <= 0) p.setItemOnCursor(null);
-                }
+                // No queuing or consuming here!
             }
 
             case CHECK_BUTTON -> {
@@ -133,30 +132,39 @@ public class GuiEventListener implements Listener {
 
                 String group = checkItems.get(slot);
                 if (group == null) {
-                    p.sendMessage("§cNo reward group configured for this button.");
+                    p.sendMessage("§cNo reward group configured.");
                     return;
                 }
 
                 boolean allValid = true;
                 for (int s : connected) {
                     ItemStack it = e.getInventory().getItem(s);
-                    if (it == null || !rewardHandler.queueReward(p.getUniqueId(), it)) {
+                    if (it == null) {
+                        allValid = false;
+                        break;
+                    }
+                    String key = resolveKey(it);
+                    RewardGroupManager.RewardEntry entry = rewardHandler.getRewardGroupManager().getEntryForItem(key);
+                    if (entry == null || !entry.groupName().equals(group)) {
                         allValid = false;
                         break;
                     }
                 }
 
                 if (!allValid) {
-                    p.sendMessage("§cInvalid item(s) or no matching reward.");
+                    p.sendMessage("§cInvalid item(s) or wrong group.");
                     return;
                 }
 
                 for (int s : connected) {
+                    ItemStack it = e.getInventory().getItem(s);
+                    if (it != null) rewardHandler.queueReward(p.getUniqueId(), it);
+
                     if (actions.getOrDefault(s, InputActionType.NONE) == InputActionType.CONSUME) {
-                        ItemStack it = e.getInventory().getItem(s);
                         if (it != null) {
-                            int n = it.getAmount() - 1;
-                            if (n > 0) it.setAmount(n);
+                            int amtToRemove = perStack.getOrDefault(s, false) ? it.getAmount() : 1;
+                            int newAmt = it.getAmount() - amtToRemove;
+                            if (newAmt > 0) it.setAmount(newAmt);
                             else e.getInventory().setItem(s, null);
                         }
                     }
@@ -201,6 +209,13 @@ public class GuiEventListener implements Listener {
 
             case FILLER -> e.setCancelled(true);
         }
+    }
+
+    private String resolveKey(ItemStack stack) {
+        if (rewardHandler.getMythic().isMythicItem(stack)) {
+            return rewardHandler.getMythic().getMythicTypeFromItem(stack);
+        }
+        return stack.getType().name();
     }
 
     private void paintRetrieval(Inventory inv,

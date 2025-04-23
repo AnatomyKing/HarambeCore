@@ -27,11 +27,13 @@ public class RewardHandler {
     public PlayerRewardData getPlayerRewardData()     { return playerRewardData; }
     public RewardGroupManager getRewardGroupManager() { return rewardGroupManager; }
 
-    /** Called by GUI code – resolves key from ItemStack */
-    public boolean queueReward(UUID player, ItemStack stack) {
+    /**
+     * Called by GUI code – resolves key from ItemStack
+     */
+    public void queueReward(UUID player, ItemStack stack) {
         String key = resolveKey(stack);
-        if (key == null) return false;
-        return queueReward(player, key);
+        if (key == null) return;
+        queueReward(player, key);
     }
 
     /** Called by commands – key is already known (Mythic item id or material) */
@@ -71,5 +73,10 @@ public class RewardHandler {
     private String resolveKey(ItemStack stack) {
         if (mythic.isMythicItem(stack)) return mythic.getMythicTypeFromItem(stack);
         return stack.getType().name();
+    }
+
+
+    public io.lumine.mythic.api.items.ItemManager getMythic() {
+        return mythic;
     }
 }

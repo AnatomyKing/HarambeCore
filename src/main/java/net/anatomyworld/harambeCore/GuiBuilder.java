@@ -167,9 +167,13 @@ public class GuiBuilder {
 
                         if (bc.isString("accepted_item")) {
                             String mat = bc.getString("accepted_item");
-                            for (int s : slots) acceptedItems.put(s, mat.toUpperCase(Locale.ROOT));
+                            for (int s : slots) {
+                                assert mat != null;
+                                acceptedItems.put(s, mat.toUpperCase(Locale.ROOT));
+                            }
                         } else if (bc.isConfigurationSection("accepted_item")) {
                             ConfigurationSection ai = bc.getConfigurationSection("accepted_item");
+                            assert ai != null;
                             String mat = ai.getString("material");
                             int amount = ai.getInt("amount", -1);
                             String rGroupInner = ai.getString("reward_group", null);
@@ -208,7 +212,7 @@ public class GuiBuilder {
                         String rGroup = extractRewardGroup(bc);
                         List<Integer> connected = new ArrayList<>();
                         if (connectKey != null && buttonsSection.isConfigurationSection(connectKey))
-                            connected = buttonsSection.getConfigurationSection(connectKey).getIntegerList("slot");
+                            connected = Objects.requireNonNull(buttonsSection.getConfigurationSection(connectKey)).getIntegerList("slot");
 
                         ConfigurationSection d = bc.getConfigurationSection("design");
                         String matName = d != null ? d.getString("material") : "STONE";
@@ -260,9 +264,9 @@ public class GuiBuilder {
 
     private String extractRewardGroup(ConfigurationSection section) {
         if (section.isConfigurationSection("accepted_item"))
-            return section.getConfigurationSection("accepted_item").getString("reward_group", null);
+            return Objects.requireNonNull(section.getConfigurationSection("accepted_item")).getString("reward_group", null);
         if (section.isConfigurationSection("check_item"))
-            return section.getConfigurationSection("check_item").getString("reward_group", null);
+            return Objects.requireNonNull(section.getConfigurationSection("check_item")).getString("reward_group", null);
         return section.getString("reward_group");
     }
 
