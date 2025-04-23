@@ -80,11 +80,13 @@ public class GuiEventListener implements Listener {
                 String acceptedItem = acceptedItems.get(clickedSlot);
 
                 if (acceptedItem != null && !acceptedItem.isEmpty()) {
-                    ItemStack cursorItem = event.getCursor();
-                    if (cursorItem == null || !cursorItem.getType().name().equalsIgnoreCase(acceptedItem)) {
-                        event.setCancelled(true);
-                        player.sendMessage("§cOnly " + acceptedItem + " is allowed in this slot.");
-                        return;
+                    if (event.getCursor() != null && !event.getCursor().getType().isAir()) {
+                        ItemStack cursorItem = event.getCursor();
+                        if (!cursorItem.getType().name().equalsIgnoreCase(acceptedItem)) {
+                            event.setCancelled(true);
+                            player.sendMessage("§cOnly " + acceptedItem + " is allowed in this slot.");
+                            return;
+                        }
                     }
                 }
 
