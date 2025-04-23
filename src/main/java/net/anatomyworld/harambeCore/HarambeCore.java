@@ -1,7 +1,11 @@
 package net.anatomyworld.harambeCore;
 
-import net.anatomyworld.harambeCore.util.EconomyHandler;
 import net.anatomyworld.harambeCore.item.ItemRegistry;
+import net.anatomyworld.harambeCore.item.MythicMobsRegistry;
+import net.anatomyworld.harambeCore.item.PlayerRewardData;
+import net.anatomyworld.harambeCore.item.RewardGroupManager;
+import net.anatomyworld.harambeCore.item.RewardHandler;
+import net.anatomyworld.harambeCore.util.EconomyHandler;
 import net.anatomyworld.harambeCore.util.PoisonEffect;
 import net.anatomyworld.harambeCore.util.RecipeBookPacketListener;
 import org.bukkit.Bukkit;
@@ -24,43 +28,49 @@ public class HarambeCore extends JavaPlugin implements Listener {
     private CommandHandler commandHandler;
     private RecipeBookPacketListener recipeBookPacketListener;
 
+    // These are now instance fields to allow correct passing into listeners
+    private RewardHandler rewardHandler;
+    private RewardGroupManager rewardGroupManager;
+    private PlayerRewardData playerRewardData;
+
     @Override
     public void onEnable() {
         getLogger().info("§aHarambeCore has been enabled!");
 
-        // Ensure Vault or economy plugin is present
+        // Economy check
         if (!EconomyHandler.setupEconomy()) {
             getLogger().severe("Vault not found or no economy plugin found! Disabling plugin.");
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
 
+        // Load config and folders
         saveDefaultConfig();
         this.config = getConfig();
-        ensureSubmitItemsFolderExists();
+        ensureDataFolders();
 
-        // Initialize custom systems
-        itemRegistry = new ItemRegistry(this);
-        guiBuilder = new GuiBuilder(this, config);
-        commandHandler = new CommandHandler(this, guiBuilder, itemRegistry);
+        // Initialize plugin components
+        this.itemRegistry = new MythicMobsRegistry();
+        this.guiBuilder = new GuiBuilder(this, config);
+        this.rewardGroupManager = new RewardGroupManager(this);
+        this.playerRewardData = new PlayerRewardData(getDataFolder());
+        this.rewardHandler = new RewardHandler(rewardGroupManager, playerRewardData);
+        this.commandHandler = new CommandHandler(this, guiBuilder, rewardHandler, rewardGroupManager, itemRegistry);
 
+        // Register everything
         registerGuiEventListener();
         registerPoisonEffect();
-
-        // Retrieve the recipe book command from config; default to "enderlink"
-        String recipeBookCommand = config.getString("recipe-book-command", "enderlink");
-        // Register packet listener and pass our config-based command
-        recipeBookPacketListener = new RecipeBookPacketListener(this, recipeBookCommand);
-
-        // Register your custom commands
         commandHandler.registerCommands();
+
+        // Custom packet listener setup
+        String recipeBookCommand = config.getString("recipe-book-command", "enderlink");
+        recipeBookPacketListener = new RecipeBookPacketListener(this, recipeBookCommand);
 
         getLogger().info("§aHarambeCore plugin setup complete!");
     }
 
     @Override
     public void onDisable() {
-        // Remove packet interceptors
         if (recipeBookPacketListener != null) {
             recipeBookPacketListener.shutdown();
         }
@@ -73,31 +83,30 @@ public class HarambeCore extends JavaPlugin implements Listener {
         this.config = getConfig();
 
         guiBuilder.updateConfig(config);
-        commandHandler.registerCommands();
         registerPoisonEffect();
+        commandHandler.registerCommands();
 
-        // Re-inject packet listeners for all players
         if (recipeBookPacketListener != null) {
             recipeBookPacketListener.shutdown();
         }
 
-        // Again, read from config in case it changed, then re-create the listener
         String recipeBookCommand = config.getString("recipe-book-command", "enderlink");
         recipeBookPacketListener = new RecipeBookPacketListener(this, recipeBookCommand);
 
         getLogger().info("§aPlugin fully reloaded.");
     }
 
-    private void ensureSubmitItemsFolderExists() {
-        File submitItemsFolder = new File(getDataFolder(), "submititems");
-        if (!submitItemsFolder.exists() && !submitItemsFolder.mkdirs()) {
-            getLogger().warning("Failed to create 'submititems' directory.");
-        }
+    private void ensureDataFolders() {
+        File configFolder = new File(getDataFolder(), "config");
+        File playerDataFolder = new File(getDataFolder(), "playerdata");
+
+        if (!configFolder.exists()) configFolder.mkdirs();
+        if (!playerDataFolder.exists()) playerDataFolder.mkdirs();
     }
 
     private void registerGuiEventListener() {
         getServer().getPluginManager().registerEvents(
-                new GuiEventListener(guiBuilder, itemRegistry), this);
+                new GuiEventListener(guiBuilder, rewardHandler, itemRegistry), this);
     }
 
     private void registerPoisonEffect() {
@@ -121,4 +130,3 @@ public class HarambeCore extends JavaPlugin implements Listener {
         }
     }
 }
-

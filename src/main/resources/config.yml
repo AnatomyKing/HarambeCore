@@ -5,8 +5,59 @@ filler:
 
 gui:
 
+  dungeon_gui:
+    title: "&6Dungeon Exchange"
+    size: 27
 
-  banana:
+    buttons:
+      deposit_gold:
+        slot: [ 10 ]
+        type: INPUT_SLOT
+        action: CONSUME
+        accepted_item: GOLD_INGOT
+        cost: 1
+
+      deposit_diamond_scaled:
+        slot: [ 12 ]
+        type: INPUT_SLOT
+        action: CONSUME
+        accepted_item:
+          material: DIAMOND
+        cost:
+          eco: 5
+          per_stack: true
+
+      pay_exact_emeralds:
+        slot: [ 14 ]
+        type: INPUT_SLOT
+        action: CONSUME
+        accepted_item:
+          material: EMERALD
+          amount: 13
+        cost:
+          eco: 1
+          per_stack: true
+
+      withdraw_button:
+        slot: [ 16 ]
+        type: BUTTON
+        action: GIVE
+        output_item: GOLD_INGOT
+        payout_amount: 3
+        design:
+          material: CHEST
+          name: "&aWithdraw Gold"
+          custom_model_data: 0
+
+
+      trade_check_zone:
+        slot: [ 21, 22, 23 ]
+        type: INPUT_SLOT
+        action: CONSUME
+        accepted_item:
+          material: IRON_INGOT
+
+  shop:
     title: "&6Item Shop"
     size: 27
     buttons:
@@ -32,7 +83,7 @@ gui:
         type: INPUT_SLOT
         action: CONSUME
         accepted_item: GOLD_INGOT
-        cost: 2
+        cost: 1
 
       give_gold_button:
         slot: [ 14 ]
@@ -105,7 +156,6 @@ gui:
         design:
           material: BARRIER
           name: "&cClear Storage"
-
 
 
 poison:

@@ -2,18 +2,18 @@ name: HarambeCore
 version: '1.0-SNAPSHOT'
 main: net.anatomyworld.harambeCore.HarambeCore
 api-version: '1.21'
-description: A plugin for managing custom GUIs, items, and integration with DungeonMMO.
+description: A plugin for managing custom GUIs, reward groups, and item systems via MythicMobs.
 
-depend: [ProtocolLib, Vault]
+depend: [MythicMobs, Vault]
 
 commands:
   harambe:
-    description: Plugin management, item commands, and GUI access.
-    usage: /harambe <reload|give|set|GUI_NAME>
+    description: Core admin command for reload, reward mapping, and player reward management.
+    usage: /harambe <reload|set rewardgroup|set reward|give reward>
     aliases: [md]
     permission: harambefd.admin
 
 permissions:
   harambefd.admin:
-    description: Permission to use admin commands like reload, item/reward management, and access GUIs.
+    description: Allows access to all HarambeCore admin commands and GUI features.
     default: op

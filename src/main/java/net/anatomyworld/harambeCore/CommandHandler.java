@@ -1,9 +1,10 @@
 package net.anatomyworld.harambeCore;
 
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.anatomyworld.harambeCore.item.ItemRegistry;
+import net.anatomyworld.harambeCore.item.RewardHandler;
+import net.anatomyworld.harambeCore.item.RewardGroupManager;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import org.bukkit.Bukkit;
@@ -14,11 +15,18 @@ public class CommandHandler {
 
     private final HarambeCore plugin;
     private final GuiBuilder guiBuilder;
+    private final RewardHandler rewardHandler;
+    private final RewardGroupManager rewardGroupManager;
     private final ItemRegistry itemRegistry;
 
-    public CommandHandler(HarambeCore plugin, GuiBuilder guiBuilder, ItemRegistry itemRegistry) {
+    public CommandHandler(HarambeCore plugin, GuiBuilder guiBuilder,
+                          RewardHandler rewardHandler,
+                          RewardGroupManager rewardGroupManager,
+                          ItemRegistry itemRegistry) {
         this.plugin = plugin;
         this.guiBuilder = guiBuilder;
+        this.rewardHandler = rewardHandler;
+        this.rewardGroupManager = rewardGroupManager;
         this.itemRegistry = itemRegistry;
     }
 
@@ -28,7 +36,7 @@ public class CommandHandler {
                 .getCommands()
                 .getDispatcher();
 
-        // Register /harambe command tree
+        // Core /harambe command tree
         dispatcher.register(
                 Commands.literal("harambe")
                         .then(Commands.literal("reload")
@@ -38,73 +46,80 @@ public class CommandHandler {
                                     return 1;
                                 })
                         )
-                        .then(Commands.literal("set")
-                                .then(Commands.literal("item")
-                                        .then(Commands.argument("item_name", StringArgumentType.word())
-                                                .executes(ctx -> {
-                                                    Player player = (Player) ctx.getSource().getBukkitSender();
-                                                    var item = player.getInventory().getItemInMainHand();
-                                                    if (item.getType().isAir()) {
-                                                        player.sendMessage("§cHold an item to set it.");
-                                                        return 0;
-                                                    }
 
-                                                    String name = StringArgumentType.getString(ctx, "item_name").toLowerCase();
-                                                    itemRegistry.registerItem(name, item);
-                                                    player.getInventory().setItemInMainHand(null);
-                                                    player.sendMessage("§aItem '" + name + "' has been set.");
-                                                    return 1;
-                                                })
+                        // Set reward group entries
+                        .then(Commands.literal("set")
+                                .then(Commands.literal("rewardgroup")
+                                        .then(Commands.argument("group", StringArgumentType.word())
+                                                .then(Commands.argument("item", StringArgumentType.word())
+                                                        .then(Commands.argument("reward", StringArgumentType.word())
+                                                                .executes(ctx -> {
+                                                                    String group = StringArgumentType.getString(ctx, "group");
+                                                                    String item = StringArgumentType.getString(ctx, "item");
+                                                                    String reward = StringArgumentType.getString(ctx, "reward");
+
+                                                                    rewardGroupManager.addReward(group, item, reward);
+                                                                    ctx.getSource().getBukkitSender().sendMessage("§aReward mapping added to group '" + group + "'.");
+                                                                    return 1;
+                                                                })
+                                                        )
+                                                )
                                         )
                                 )
-                                .then(Commands.literal("reward")
-                                        .then(Commands.argument("item_name", StringArgumentType.word())
-                                                .then(Commands.argument("reward_name", StringArgumentType.word())
-                                                        .executes(ctx -> {
-                                                            Player player = (Player) ctx.getSource().getBukkitSender();
-                                                            var item = player.getInventory().getItemInMainHand();
-                                                            if (item.getType().isAir()) {
-                                                                player.sendMessage("§cHold an item to set it.");
-                                                                return 0;
-                                                            }
 
-                                                            String itemName = StringArgumentType.getString(ctx, "item_name").toLowerCase();
-                                                            String rewardName = StringArgumentType.getString(ctx, "reward_name").toLowerCase();
-                                                            itemRegistry.registerReward(itemName, rewardName, item);
-                                                            player.getInventory().setItemInMainHand(null);
-                                                            player.sendMessage("§aReward '" + rewardName + "' set for '" + itemName + "'.");
-                                                            return 1;
+                                // Assign reward to a player
+                                .then(Commands.literal("reward")
+                                        .then(Commands.argument("player", StringArgumentType.word())
+                                                .then(Commands.argument("item", StringArgumentType.word())
+                                                        .executes(ctx -> {
+                                                            Player target = Bukkit.getPlayer(StringArgumentType.getString(ctx, "player"));
+                                                            String item = StringArgumentType.getString(ctx, "item");
+
+                                                            if (target != null && rewardHandler.queueReward(target.getUniqueId(), item)) {
+                                                                ctx.getSource().getBukkitSender().sendMessage("§aQueued reward from item '" + item + "' for " + target.getName());
+                                                                return 1;
+                                                            }
+                                                            ctx.getSource().getBukkitSender().sendMessage("§cFailed to queue reward.");
+                                                            return 0;
                                                         })
                                                 )
                                         )
                                 )
                         )
+
+                        // Give reward to player
                         .then(Commands.literal("give")
-                                .then(Commands.literal("item")
-                                        .then(Commands.argument("target", StringArgumentType.word())
-                                                .then(Commands.argument("item_name", StringArgumentType.word())
-                                                        .then(Commands.argument("amount", IntegerArgumentType.integer(1))
+                                .then(Commands.literal("reward")
+                                        .then(Commands.argument("player", StringArgumentType.word())
+                                                .then(Commands.argument("group", StringArgumentType.word())
+                                                        .executes(ctx -> {
+                                                            Player target = Bukkit.getPlayer(StringArgumentType.getString(ctx, "player"));
+                                                            String group = StringArgumentType.getString(ctx, "group");
+
+                                                            if (target != null) {
+                                                                rewardHandler.giveAllRewards(target, group, itemRegistry);
+                                                                ctx.getSource().getBukkitSender().sendMessage("§aGave all rewards from group '" + group + "' to " + target.getName());
+                                                                return 1;
+                                                            }
+                                                            ctx.getSource().getBukkitSender().sendMessage("§cPlayer not found.");
+                                                            return 0;
+                                                        })
+                                                        .then(Commands.argument("item", StringArgumentType.word())
                                                                 .executes(ctx -> {
-                                                                    Player sender = (Player) ctx.getSource().getBukkitSender();
-                                                                    Player target = Bukkit.getPlayer(StringArgumentType.getString(ctx, "target"));
-                                                                    String itemName = StringArgumentType.getString(ctx, "item_name").toLowerCase();
-                                                                    int amount = IntegerArgumentType.getInteger(ctx, "amount");
+                                                                    Player target = Bukkit.getPlayer(StringArgumentType.getString(ctx, "player"));
+                                                                    String group = StringArgumentType.getString(ctx, "group");
+                                                                    String item = StringArgumentType.getString(ctx, "item");
 
-                                                                    if (target == null) {
-                                                                        sender.sendMessage("§cTarget player not found.");
-                                                                        return 0;
+                                                                    if (target != null) {
+                                                                        boolean success = rewardHandler.giveReward(target, group, item, itemRegistry);
+                                                                        if (success) {
+                                                                            ctx.getSource().getBukkitSender().sendMessage("§aGave reward '" + item + "' to " + target.getName());
+                                                                            return 1;
+                                                                        } else {
+                                                                            ctx.getSource().getBukkitSender().sendMessage("§cReward item not found or not queued.");
+                                                                        }
                                                                     }
-
-                                                                    var item = itemRegistry.generateItem(itemName);
-                                                                    if (item != null) {
-                                                                        item.setAmount(amount);
-                                                                        target.getInventory().addItem(item);
-                                                                        sender.sendMessage("§aGave " + amount + "x '" + itemName + "' to " + target.getName());
-                                                                        return 1;
-                                                                    } else {
-                                                                        sender.sendMessage("§cItem not found: " + itemName);
-                                                                        return 0;
-                                                                    }
+                                                                    return 0;
                                                                 })
                                                         )
                                                 )
@@ -114,21 +129,19 @@ public class CommandHandler {
         );
 
         // Register dynamic GUI commands
-        guiBuilder.getGuiKeys().forEach(guiKey -> {
-            dispatcher.register(
-                    Commands.literal(guiKey.toLowerCase())
-                            .executes(ctx -> {
-                                var sender = ctx.getSource().getBukkitSender();
-                                if (sender instanceof Player player) {
-                                    guiBuilder.createAndOpenGui(guiKey, player);
-                                    return 1;
-                                } else {
-                                    sender.sendMessage("§cOnly players can open GUIs.");
-                                    return 0;
-                                }
-                            })
-            );
-        });
+        guiBuilder.getGuiKeys().forEach(guiKey -> dispatcher.register(
+                Commands.literal(guiKey.toLowerCase())
+                        .executes(ctx -> {
+                            var sender = ctx.getSource().getBukkitSender();
+                            if (sender instanceof Player player) {
+                                guiBuilder.createAndOpenGui(guiKey, player);
+                                return 1;
+                            } else {
+                                sender.sendMessage("§cOnly players can open GUIs.");
+                                return 0;
+                            }
+                        })
+        ));
 
         plugin.getLogger().info("§aRegistered /harambe command tree and GUI commands.");
     }

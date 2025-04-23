@@ -1,10 +1,11 @@
 package net.anatomyworld.harambeCore;
 
+import net.anatomyworld.harambeCore.GuiBuilder.InputActionType;
 import net.anatomyworld.harambeCore.GuiBuilder.SlotType;
 import net.anatomyworld.harambeCore.item.ItemRegistry;
+import net.anatomyworld.harambeCore.item.RewardHandler;
 import net.anatomyworld.harambeCore.util.EconomyHandler;
 import net.anatomyworld.harambeCore.util.RecipeBookUtils;
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -12,194 +13,232 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.*;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.plugin.java.JavaPlugin;
 
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 
 public class GuiEventListener implements Listener {
 
     private final GuiBuilder guiBuilder;
+    private final RewardHandler rewardHandler;
+    private final ItemRegistry itemRegistry;
 
-    public GuiEventListener(GuiBuilder guiBuilder, ItemRegistry itemRegistry) {
+    public GuiEventListener(GuiBuilder guiBuilder, RewardHandler rewardHandler, ItemRegistry itemRegistry) {
         this.guiBuilder = guiBuilder;
+        this.rewardHandler = rewardHandler;
+        this.itemRegistry = itemRegistry;
     }
 
     @EventHandler
-    public void onInventoryClick(InventoryClickEvent event) {
-        if (!(event.getWhoClicked() instanceof Player player)) return;
-        Inventory clickedInventory = event.getClickedInventory();
-        if (clickedInventory == null) return;
-
-        String guiKey = guiBuilder.getGuiKeyByInventory(player, event.getInventory());
+    public void onInventoryOpen(InventoryOpenEvent e) {
+        if (!(e.getPlayer() instanceof Player p)) return;
+        String guiKey = guiBuilder.getGuiKeyByInventory(p, e.getInventory());
         if (guiKey == null) return;
 
-        // Block shift-clicks
-        if (event.getClick() == ClickType.SHIFT_LEFT || event.getClick() == ClickType.SHIFT_RIGHT) {
-            event.setCancelled(true);
-            player.sendMessage("§cShift-clicking is disabled in this GUI.");
+        Map<Integer, SlotType> slotTypes = guiBuilder.getGuiSlotTypes().get(guiKey);
+        Map<Integer, String> groupMap = guiBuilder.getRewardGroups(guiKey);
+
+        groupMap.values().stream().distinct().forEach(group ->
+                paintRetrieval(e.getInventory(), slotTypes, groupMap, group,
+                        rewardHandler.getPlayerRewardData().getAllRewards(p.getUniqueId(), group)));
+    }
+
+    @EventHandler
+    public void onInventoryClick(InventoryClickEvent e) {
+        if (!(e.getWhoClicked() instanceof Player p)) return;
+        if (e.getClickedInventory() == null) return;
+        String guiKey = guiBuilder.getGuiKeyByInventory(p, e.getInventory());
+        if (guiKey == null) return;
+
+        if (e.getClick() == ClickType.SHIFT_LEFT || e.getClick() == ClickType.SHIFT_RIGHT) {
+            e.setCancelled(true);
+            p.sendMessage("§cShift-clicking is disabled in this GUI.");
             return;
         }
 
-        int rawSlot = event.getRawSlot();
-        int clickedSlot = event.getSlot();
-
-        if (rawSlot >= event.getInventory().getSize()) return;
+        int slot = e.getSlot();
+        if (e.getRawSlot() >= e.getInventory().getSize()) return;
 
         Map<Integer, SlotType> slotTypes = guiBuilder.getGuiSlotTypes().get(guiKey);
-        if (slotTypes == null) return;
+        SlotType st = slotTypes.get(slot);
+        if (st == null) return;
 
-        SlotType slotType = slotTypes.get(clickedSlot);
-        if (slotType == null) return;
+        Map<Integer, String> accepted = guiBuilder.getAcceptedItems(guiKey);
+        Map<Integer, Integer> amounts = guiBuilder.getAcceptedAmounts(guiKey);
+        Map<Integer, Double> costs = guiBuilder.getSlotCosts(guiKey);
+        Map<Integer, Boolean> perStack = guiBuilder.getCostPerStack(guiKey);
+        Map<Integer, InputActionType> actions = guiBuilder.getInputActions(guiKey);
+        Map<Integer, List<Integer>> conn = guiBuilder.getSlotConnections(guiKey);
+        Map<Integer, String> groupMap = guiBuilder.getRewardGroups(guiKey);
+        Map<Integer, String> checkItems = guiBuilder.getCheckItems(guiKey);
 
-        Map<Integer, String> acceptedItems = guiBuilder.getAcceptedItems(guiKey);
-        Map<Integer, Integer> acceptedAmounts = guiBuilder.getAcceptedAmounts(guiKey);
-        Map<Integer, Double> ecoCosts = guiBuilder.getSlotCosts(guiKey);
-        Map<Integer, Boolean> perStackFlags = guiBuilder.getCostPerStack(guiKey);
-        Map<Integer, GuiBuilder.InputActionType> inputActions = guiBuilder.getInputActions(guiKey);
-        Map<Integer, List<Integer>> slotConnections = guiBuilder.getSlotConnections(guiKey);
-
-        switch (slotType) {
+        switch (st) {
             case BUTTON -> {
-                double cost = ecoCosts.getOrDefault(clickedSlot, 0.0);
-                event.setCancelled(true);
-                if (cost > 0 && !EconomyHandler.hasEnoughBalance(player, cost)) {
-                    player.sendMessage("§cYou need " + cost + " to click this.");
+                double fee = costs.getOrDefault(slot, 0.0);
+                e.setCancelled(true);
+                if (fee > 0 && !EconomyHandler.withdrawBalance(p, fee)) {
+                    p.sendMessage("§cYou need " + fee);
                     return;
                 }
-                if (cost > 0 && !EconomyHandler.withdrawBalance(player, cost)) {
-                    player.sendMessage("§cPayment failed.");
-                    return;
-                }
-                guiBuilder.handleButtonClick(player, guiKey, clickedSlot);
+                guiBuilder.handleButtonClick(p, guiKey, slot);
             }
 
             case INPUT_SLOT -> {
-                boolean isLinkedToCheck = slotConnections.values().stream()
-                        .anyMatch(list -> list.contains(clickedSlot));
+                ItemStack cur = e.getCursor();
+                if (cur == null || cur.getType().isAir()) return;
 
-                GuiBuilder.InputActionType action = inputActions.getOrDefault(clickedSlot, GuiBuilder.InputActionType.NONE);
-                ItemStack cursor = event.getCursor();
-
-                if (acceptedItems.containsKey(clickedSlot) && cursor != null && !cursor.getType().isAir()) {
-                    String expectedMaterial = acceptedItems.get(clickedSlot);
-                    Material mat = Material.matchMaterial(expectedMaterial);
-                    if (mat == null || !cursor.getType().equals(mat)) {
-                        event.setCancelled(true);
-                        player.sendMessage("§cOnly " + expectedMaterial + " is allowed in this slot.");
+                if (accepted.containsKey(slot)) {
+                    Material m = Material.matchMaterial(accepted.get(slot));
+                    if (m == null || cur.getType() != m) {
+                        e.setCancelled(true);
+                        p.sendMessage("§cOnly " + accepted.get(slot));
                         return;
-                    }
-
-                    if (acceptedAmounts.containsKey(clickedSlot)) {
-                        int required = acceptedAmounts.get(clickedSlot);
-                        if (cursor.getAmount() != required) {
-                            event.setCancelled(true);
-                            player.sendMessage("§cYou must place exactly " + required + " items.");
-                            return;
-                        }
                     }
                 }
 
-                if (action == GuiBuilder.InputActionType.CONSUME && !isLinkedToCheck) {
-                    double costPerUnit = ecoCosts.getOrDefault(clickedSlot, 0.0);
-                    boolean perStack = perStackFlags.getOrDefault(clickedSlot, false);
-                    int amount = cursor != null ? cursor.getAmount() : 1;
-                    double totalCost = perStack ? (amount * costPerUnit) : costPerUnit;
+                if (amounts.containsKey(slot) && cur.getAmount() != amounts.get(slot)) {
+                    e.setCancelled(true);
+                    p.sendMessage("§cYou must place exactly " + amounts.get(slot));
+                    return;
+                }
 
-                    if (!EconomyHandler.hasEnoughBalance(player, totalCost)) {
-                        event.setCancelled(true);
-                        player.sendMessage("§cYou need " + totalCost + " to place that item.");
+                boolean linked = conn.values().stream().anyMatch(l -> l.contains(slot));
+                if (actions.getOrDefault(slot, InputActionType.NONE) == InputActionType.CONSUME && !linked) {
+                    double base = costs.getOrDefault(slot, 0.0);
+                    int amt = cur.getAmount();
+                    double fee = perStack.getOrDefault(slot, false) ? base * amt : base;
+                    if (!EconomyHandler.withdrawBalance(p, fee)) {
+                        e.setCancelled(true);
+                        p.sendMessage("§cYou need " + fee);
                         return;
                     }
-
-                    if (!EconomyHandler.withdrawBalance(player, totalCost)) {
-                        event.setCancelled(true);
-                        player.sendMessage("§cPayment failed.");
-                        return;
-                    }
-
-                    if (cursor != null && amount > 0) {
-                        int toConsume = perStack ? amount : 1;
-                        int remaining = cursor.getAmount() - toConsume;
-
-                        ItemStack newCursor = (remaining > 0) ? new ItemStack(cursor.getType(), remaining) : null;
-                        Bukkit.getScheduler().runTask(JavaPlugin.getPlugin(HarambeCore.class),
-                                () -> player.setItemOnCursor(newCursor));
-
-                        player.sendMessage("§eConsumed " + toConsume + " " +
-                                cursor.getType().name().toLowerCase(Locale.ROOT).replace("_", " ") + ".");
-                    }
-
-                    event.setCancelled(true);
+                    int toRemove = perStack.getOrDefault(slot, false) ? amt : 1;
+                    cur.setAmount(cur.getAmount() - toRemove);
+                    if (cur.getAmount() <= 0) p.setItemOnCursor(null);
                 }
             }
 
             case CHECK_BUTTON -> {
-                double cost = ecoCosts.getOrDefault(clickedSlot, 0.0);
-                event.setCancelled(true);
-                if (cost > 0 && !EconomyHandler.hasEnoughBalance(player, cost)) {
-                    player.sendMessage("§cYou need " + cost + " to use this.");
-                    return;
-                }
-                if (cost > 0 && !EconomyHandler.withdrawBalance(player, cost)) {
-                    player.sendMessage("§cPayment failed.");
+                double fee = costs.getOrDefault(slot, 0.0);
+                e.setCancelled(true);
+                if (fee > 0 && !EconomyHandler.withdrawBalance(p, fee)) {
+                    p.sendMessage("§cYou need " + fee);
                     return;
                 }
 
-                String requiredMaterial = guiBuilder.getCheckItems(guiKey).get(clickedSlot);
-                List<Integer> checkSlots = slotConnections.get(clickedSlot);
+                List<Integer> connected = conn.get(slot);
+                if (connected == null || connected.isEmpty()) {
+                    p.sendMessage("§cNothing to check.");
+                    return;
+                }
 
-                boolean match = checkSlots != null && !checkSlots.isEmpty() && checkSlots.stream().allMatch(slot -> {
-                    ItemStack item = event.getInventory().getItem(slot);
-                    return item != null && item.getType().name().equalsIgnoreCase(requiredMaterial);
-                });
+                String group = checkItems.get(slot);
+                if (group == null) {
+                    p.sendMessage("§cNo reward group configured for this button.");
+                    return;
+                }
 
-                if (match) {
-                    for (int slot : checkSlots) {
-                        GuiBuilder.InputActionType action = inputActions.getOrDefault(slot, GuiBuilder.InputActionType.NONE);
-                        if (action == GuiBuilder.InputActionType.CONSUME) {
-                            ItemStack item = event.getInventory().getItem(slot);
-                            if (item != null) {
-                                int newAmount = item.getAmount() - 1;
-                                if (newAmount > 0) {
-                                    item.setAmount(newAmount);
-                                } else {
-                                    event.getInventory().setItem(slot, null);
-                                }
-                            }
+                boolean allValid = true;
+                for (int s : connected) {
+                    ItemStack it = e.getInventory().getItem(s);
+                    if (it == null || !rewardHandler.queueReward(p.getUniqueId(), it)) {
+                        allValid = false;
+                        break;
+                    }
+                }
+
+                if (!allValid) {
+                    p.sendMessage("§cInvalid item(s) or no matching reward.");
+                    return;
+                }
+
+                for (int s : connected) {
+                    if (actions.getOrDefault(s, InputActionType.NONE) == InputActionType.CONSUME) {
+                        ItemStack it = e.getInventory().getItem(s);
+                        if (it != null) {
+                            int n = it.getAmount() - 1;
+                            if (n > 0) it.setAmount(n);
+                            else e.getInventory().setItem(s, null);
                         }
                     }
-
-                    guiBuilder.handleButtonClick(player, guiKey, clickedSlot);
-                } else {
-                    player.sendMessage("§cCheck failed. Required item not found in input slots.");
                 }
+
+                guiBuilder.handleButtonClick(p, guiKey, slot);
+
+                paintRetrieval(e.getInventory(), slotTypes, groupMap, group,
+                        rewardHandler.getPlayerRewardData().getAllRewards(p.getUniqueId(), group));
             }
 
-            case FILLER -> event.setCancelled(true);
+            case OUTPUT_SLOT -> {
+                e.setCancelled(true);
+                String group = groupMap.get(slot);
+                if (group == null) {
+                    p.sendMessage("§cNo group.");
+                    return;
+                }
+
+                List<String> list = rewardHandler.getPlayerRewardData().getAllRewards(p.getUniqueId(), group);
+                if (list.isEmpty()) {
+                    p.sendMessage("§cNo rewards.");
+                    return;
+                }
+
+                List<Integer> outs = outputSlotsForGroup(slotTypes, groupMap, group);
+                int idx = outs.indexOf(slot);
+                if (idx >= list.size()) {
+                    e.getInventory().setItem(slot, null);
+                    return;
+                }
+
+                String id = list.get(idx);
+                ItemStack item = itemRegistry.getItem(id);
+                if (item == null) return;
+                p.getInventory().addItem(item);
+                rewardHandler.getPlayerRewardData().removeReward(p.getUniqueId(), group, id);
+
+                paintRetrieval(e.getInventory(), slotTypes, groupMap, group,
+                        rewardHandler.getPlayerRewardData().getAllRewards(p.getUniqueId(), group));
+            }
+
+            case FILLER -> e.setCancelled(true);
         }
+    }
+
+    private void paintRetrieval(Inventory inv,
+                                Map<Integer, SlotType> slotTypes,
+                                Map<Integer, String> groupMap,
+                                String group, List<String> rewards) {
+
+        List<Integer> outs = outputSlotsForGroup(slotTypes, groupMap, group);
+        for (int i = 0; i < outs.size(); i++) {
+            int s = outs.get(i);
+            if (i < rewards.size()) inv.setItem(s, itemRegistry.getItem(rewards.get(i)));
+            else inv.setItem(s, null);
+        }
+    }
+
+    private List<Integer> outputSlotsForGroup(Map<Integer, SlotType> slotTypes,
+                                              Map<Integer, String> groupMap,
+                                              String group) {
+        List<Integer> list = new ArrayList<>();
+        groupMap.forEach((k, v) -> {
+            if (group.equals(v) && slotTypes.getOrDefault(k, SlotType.FILLER) == SlotType.OUTPUT_SLOT) list.add(k);
+        });
+        Collections.sort(list);
+        return list;
     }
 
     @EventHandler
-    public void onInventoryDrag(InventoryDragEvent event) {
-        if (!(event.getWhoClicked() instanceof Player player)) return;
-
-        String guiKey = guiBuilder.getGuiKeyByInventory(player, event.getInventory());
-        if (guiKey == null) return;
-
-        event.setCancelled(true);
-        player.sendMessage("§cDragging items is disabled in this GUI.");
+    public void onInventoryDrag(InventoryDragEvent e) {
+        if (!(e.getWhoClicked() instanceof Player p)) return;
+        if (guiBuilder.getGuiKeyByInventory(p, e.getInventory()) == null) return;
+        e.setCancelled(true);
+        p.sendMessage("§cDragging is disabled in this GUI.");
     }
 
-
-
-@EventHandler
-    public void onInventoryClose(InventoryCloseEvent event) {
-        if (!(event.getPlayer() instanceof Player player)) return;
-
-        if (event.getInventory().getType() == InventoryType.WORKBENCH) {
-            RecipeBookUtils.forceCloseClientRecipeBook(player);
-        }
+    @EventHandler
+    public void onInventoryClose(InventoryCloseEvent e) {
+        if (!(e.getPlayer() instanceof Player p)) return;
+        if (e.getInventory().getType() == InventoryType.WORKBENCH)
+            RecipeBookUtils.forceCloseClientRecipeBook(p);
     }
 }
