@@ -117,12 +117,7 @@ public class GuiEventListener implements Listener {
             }
 
             case CHECK_BUTTON -> {
-                double fee = costs.getOrDefault(slot, 0.0);
                 e.setCancelled(true);
-                if (fee > 0 && !EconomyHandler.withdrawBalance(p, fee)) {
-                    p.sendMessage("§cYou need " + fee);
-                    return;
-                }
 
                 List<Integer> connected = conn.get(slot);
                 if (connected == null || connected.isEmpty()) {
@@ -156,7 +151,8 @@ public class GuiEventListener implements Listener {
                     return;
                 }
 
-                // CHARGE AFTER VALIDATION
+
+                double fee = costs.getOrDefault(slot, 0.0);
                 if (fee > 0 && !EconomyHandler.withdrawBalance(p, fee)) {
                     p.sendMessage("§cYou need " + fee);
                     return;
