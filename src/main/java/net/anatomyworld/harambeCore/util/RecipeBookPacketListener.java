@@ -7,7 +7,8 @@ import net.minecraft.network.protocol.game.ServerboundRecipeBookChangeSettingsPa
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.world.inventory.RecipeBookType;
 import org.bukkit.Bukkit;
-import org.bukkit.craftbukkit.entity.CraftPlayer; // Adjust import for your MC version
+import org.bukkit.World;
+import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -16,21 +17,21 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.Plugin;
 
+import java.util.Map;
+
 public class RecipeBookPacketListener implements Listener {
 
     private final Plugin plugin;
-    private final String recipeBookCommand;  // The configured command
+    private final Map<String, String> worldCommands;
 
-    public RecipeBookPacketListener(Plugin plugin, String recipeBookCommand) {
+    public RecipeBookPacketListener(Plugin plugin, Map<String, String> worldCommands) {
         this.plugin = plugin;
-        this.recipeBookCommand = recipeBookCommand;
+        this.worldCommands = worldCommands;
 
-        // Inject all currently online players
         for (Player player : Bukkit.getOnlinePlayers()) {
             inject(player);
         }
 
-        // Register event listeners
         Bukkit.getPluginManager().registerEvents(this, plugin);
     }
 
@@ -51,17 +52,12 @@ public class RecipeBookPacketListener implements Listener {
     }
 
     private void inject(Player player) {
-        if (!(player instanceof CraftPlayer craftPlayer)) {
-            return;
-        }
+        if (!(player instanceof CraftPlayer craftPlayer)) return;
 
         ServerGamePacketListenerImpl connection = craftPlayer.getHandle().connection;
         ChannelPipeline pipeline = connection.connection.channel.pipeline();
 
-        // Only inject once
-        if (pipeline.get("recipe_book_toggle_handler") != null) {
-            return;
-        }
+        if (pipeline.get("recipe_book_toggle_handler") != null) return;
 
         pipeline.addBefore("packet_handler", "recipe_book_toggle_handler", new ChannelDuplexHandler() {
             @Override
@@ -73,25 +69,25 @@ public class RecipeBookPacketListener implements Listener {
                         new org.bukkit.scheduler.BukkitRunnable() {
                             @Override
                             public void run() {
-                                player.performCommand(recipeBookCommand);
-                                RecipeBookUtils.forceCloseClientRecipeBook(player);
-                                player.updateInventory();
+                                World world = player.getWorld();
+                                String command = worldCommands.getOrDefault(world.getName(), null);
+                                if (command != null) {
+                                    player.performCommand(command);
+                                    RecipeBookUtils.forceCloseClientRecipeBook(player);
+                                    player.updateInventory();
+                                }
                             }
                         }.runTask(plugin);
-
                         return;
                     }
                 }
-
                 super.channelRead(ctx, msg);
             }
         });
     }
 
     private void uninject(Player player) {
-        if (!(player instanceof CraftPlayer craftPlayer)) {
-            return;
-        }
+        if (!(player instanceof CraftPlayer craftPlayer)) return;
 
         ServerGamePacketListenerImpl connection = craftPlayer.getHandle().connection;
         ChannelPipeline pipeline = connection.connection.channel.pipeline();

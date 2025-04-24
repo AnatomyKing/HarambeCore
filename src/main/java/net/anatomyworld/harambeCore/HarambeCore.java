@@ -10,6 +10,7 @@ import net.anatomyworld.harambeCore.util.PoisonEffect;
 import net.anatomyworld.harambeCore.util.RecipeBookPacketListener;
 import org.bukkit.Bukkit;
 import org.bukkit.block.data.BlockData;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -17,6 +18,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.util.HashMap;
+import java.util.Map;
 
 public class HarambeCore extends JavaPlugin implements Listener {
 
@@ -30,8 +33,6 @@ public class HarambeCore extends JavaPlugin implements Listener {
 
     // These are now instance fields to allow correct passing into listeners
     private RewardHandler rewardHandler;
-    private RewardGroupManager rewardGroupManager;
-    private PlayerRewardData playerRewardData;
 
     @Override
     public void onEnable() {
@@ -52,8 +53,8 @@ public class HarambeCore extends JavaPlugin implements Listener {
         // Initialize plugin components
         this.itemRegistry = new MythicMobsRegistry();
         this.guiBuilder = new GuiBuilder(this, config);
-        this.rewardGroupManager = new RewardGroupManager(this);
-        this.playerRewardData = new PlayerRewardData(getDataFolder());
+        RewardGroupManager rewardGroupManager = new RewardGroupManager(this);
+        PlayerRewardData playerRewardData = new PlayerRewardData(getDataFolder());
         this.rewardHandler = new RewardHandler(rewardGroupManager, playerRewardData);
         this.commandHandler = new CommandHandler(this, guiBuilder, rewardHandler, rewardGroupManager, itemRegistry);
 
@@ -63,8 +64,14 @@ public class HarambeCore extends JavaPlugin implements Listener {
         commandHandler.registerCommands();
 
         // Custom packet listener setup
-        String recipeBookCommand = config.getString("recipe-book-command", "enderlink");
-        recipeBookPacketListener = new RecipeBookPacketListener(this, recipeBookCommand);
+        ConfigurationSection section = config.getConfigurationSection("recipe-book-commands");
+        Map<String, String> worldCommandMap = new HashMap<>();
+        if (section != null) {
+            for (String worldName : section.getKeys(false)) {
+                worldCommandMap.put(worldName, section.getString(worldName));
+            }
+        }
+        recipeBookPacketListener = new RecipeBookPacketListener(this, worldCommandMap);
 
         getLogger().info("§aHarambeCore plugin setup complete!");
     }
@@ -90,8 +97,16 @@ public class HarambeCore extends JavaPlugin implements Listener {
             recipeBookPacketListener.shutdown();
         }
 
-        String recipeBookCommand = config.getString("recipe-book-command", "enderlink");
-        recipeBookPacketListener = new RecipeBookPacketListener(this, recipeBookCommand);
+        // Load world-specific recipe book commands from config
+        ConfigurationSection section = config.getConfigurationSection("recipe-book-commands");
+        Map<String, String> worldCommandMap = new HashMap<>();
+        if (section != null) {
+            for (String worldName : section.getKeys(false)) {
+                worldCommandMap.put(worldName, section.getString(worldName));
+            }
+        }
+
+        recipeBookPacketListener = new RecipeBookPacketListener(this, worldCommandMap);
 
         getLogger().info("§aPlugin fully reloaded.");
     }

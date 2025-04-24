@@ -1,6 +1,6 @@
 filler:
   material: "RABBIT_FOOT"
-  custom_model_data: 27105
+  custom_model_data: 27104
   name: "&8" # Gray invisible name for filler slots
 
 gui:
@@ -17,7 +17,7 @@ gui:
         logic: "player:anyphone_home"
         design:
           material: DIAMOND
-          name: "Collect Faction Items"
+          name: "Close Collection"
           custom_model_data: 0
 
       retrieve_slot_home_collect:
@@ -38,7 +38,7 @@ gui:
         logic: "player:anyphone_home_collect"
         design:
           material: DIAMOND
-          name: "Collect Faction Items"
+          name: "Collect Dungeon Items"
           custom_model_data: 0
 
 
@@ -152,4 +152,8 @@ poison:
   poison-block: "minecraft:tripwire[attached=false,disarmed=true,east=true,north=false,powered=false,west=true]"
 
 
-recipe-book-command: "anyphone_home"
+recipe-book-commands:
+  world: "anyphone_home"
+  world_nether: "anyphone_faction"
+  world_faction_island: "anyphone_faction"
+
