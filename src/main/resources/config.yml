@@ -1,166 +1,155 @@
 filler:
   material: "RABBIT_FOOT"
-  custom_model_data: 27104
+  custom_model_data: 27105
   name: "&8" # Gray invisible name for filler slots
 
 gui:
 
-  dungeon_gui:
-    title: "&6Dungeon Exchange"
-    size: 27
 
-    buttons:
-      deposit_gold:
-        slot: [ 10 ]
-        type: INPUT_SLOT
-        action: CONSUME
-        accepted_item: GOLD_INGOT
-        cost: 1
-
-      deposit_diamond_scaled:
-        slot: [ 12 ]
-        type: INPUT_SLOT
-        action: CONSUME
-        accepted_item:
-          material: DIAMOND
-        cost:
-          eco: 5
-          per_stack: true
-
-      pay_exact_emeralds:
-        slot: [ 14 ]
-        type: INPUT_SLOT
-        action: CONSUME
-        accepted_item:
-          material: EMERALD
-          amount: 13
-        cost:
-          eco: 1
-          per_stack: true
-
-      withdraw_button:
-        slot: [ 16 ]
-        type: BUTTON
-        action: GIVE
-        output_item: GOLD_INGOT
-        payout_amount: 3
-        design:
-          material: CHEST
-          name: "&aWithdraw Gold"
-          custom_model_data: 0
-
-
-      trade_check_zone:
-        slot: [ 21, 22, 23 ]
-        type: INPUT_SLOT
-        action: CONSUME
-        accepted_item:
-          material: IRON_INGOT
-
-  shop:
-    title: "&6Item Shop"
-    size: 27
-    buttons:
-      buy_diamond:
-        slot: [11]
-        type: BUTTON
-        action: COMMAND
-        logic: "minecraft:give %player% minecraft:diamond"
-        cost: 25
-        design:
-          material: DIAMOND
-          name: "&bBuy Diamond"
-          custom_model_data: 0
-
-      deposit_slot:
-        slot: [13]
-        type: INPUT_SLOT
-        accepted_item: GOLD_INGOT
-        cost: 10
-
-      atm_deposit_input:
-        slot: [10]
-        type: INPUT_SLOT
-        action: CONSUME
-        accepted_item: GOLD_INGOT
-        cost: 1
-
-      give_gold_button:
-        slot: [ 14 ]
-        type: BUTTON
-        action: GIVE
-        output_item: GOLD_INGOT
-        payout_amount: 10
-        cost: 100
-        design:
-          material: GOLD_INGOT
-          name: "&6Get Gold"
-          custom_model_data: 0
-
-
-  # === GUI 1: Krobus ===
-  krobus:
-    title: "&cSpawn Menu"
-    size: 27
-
-    buttons:
-      pig_button:
-        slot: [20]
-        type: BUTTON
-        action: COMMAND
-        logic: "minecraft:summon minecraft:pig"
-        design:
-          material: PIG_SPAWN_EGG
-          name: "&dClick to spawn a pig!"
-          custom_model_data: 0
-
-      item_slot:
-        slot: [13]
-        type: INPUT_SLOT
-
-  # === GUI 2: Interface ===
-  interface:
-    title: "&aInterface Menu"
+  anyphone_home_collect:
+    title: "§f稙뀀稤"
     size: 54
-
     buttons:
-      input_slot:
-        slot: [22]
-        type: INPUT_SLOT
-
-      example_button:
-        slot: [11]
+      check_button_home_collect:
+        slot: [ 52 ]
         type: BUTTON
         action: COMMAND
-        logic: "minecraft:give %player% minecraft:diamond"
+        logic: "player:anyphone_home"
         design:
           material: DIAMOND
-          name: "&bGive yourself a diamond!"
+          name: "Collect Faction Items"
+          custom_model_data: 0
 
-  # === GUI 3: Enderlink ===
-  enderlink:
+      retrieve_slot_home_collect:
+        slot: [ 47, 49, 51 ]
+        type: OUTPUT_SLOT
+        action: REWARD_GET
+        reward_group: dungeon_items
+
+
+  anyphone_home:
     title: "§f稙稬稤"
     size: 54
-    storage: true
-
     buttons:
-      storage_slot:
-        slot: [13, 14, 22, 23, 31, 32]
-        type: INPUT_SLOT
-
-      clear_button:
-        slot: [49]
+      anyhome_open_collect:
+        slot: [ 52 ]
         type: BUTTON
         action: COMMAND
-        logic: "minecraft:clear %player%"
+        logic: "player:anyphone_home_collect"
         design:
-          material: BARRIER
-          name: "&cClear Storage"
+          material: DIAMOND
+          name: "Collect Faction Items"
+          custom_model_data: 0
 
+
+  anyphone_dungeon_one:
+    title: "§f稙稧稤"
+    size: 54
+    buttons:
+      dungeonone_submit_button:
+        slot: [ 19 ]
+        type: CHECK_BUTTON
+        slot_connection: dungeonone_submit_slot
+        check_item:
+          reward_group: dungeon_items
+        design:
+          material: DIAMOND
+          name: "Submit Dungeon Items"
+          custom_model_data: 0
+
+      dungeonone_submit_slot:
+        slot: [ 49 ]
+        type: INPUT_SLOT
+        action: CONSUME
+        accepted_item:
+          reward_group: dungeon_items
+
+  anyphone_dungeon_two:
+    title: "§f稙稥稤"
+    size: 54
+    buttons:
+      dungeontwo_submit_button:
+        slot: [ 52 ]
+        type: CHECK_BUTTON
+        slot_connection: dungeontwo_submit_slot
+        check_item:
+          reward_group: dungeon_items
+        design:
+          material: DIAMOND
+          name: "Submit Dungeon Items"
+          custom_model_data: 0
+
+      dungeontwo_submit_slot:
+        slot: [ 47, 49 ]
+        type: INPUT_SLOT
+        action: CONSUME
+        accepted_item:
+          reward_group: dungeon_items
+
+
+  anyphone_dungeon_three:
+    title: "§f稙뀀稤"
+    size: 54
+    buttons:
+      dungeonthree_submit_button:
+        slot: [ 52 ]
+        type: CHECK_BUTTON
+        slot_connection: dungeonthree_submit_slot
+        check_item:
+          reward_group: dungeon_items
+        design:
+          material: DIAMOND
+          name: "Submit Dungeon Items"
+          custom_model_data: 0
+
+      dungeonthree_submit_slot:
+        slot: [ 47, 49, 51 ]
+        type: INPUT_SLOT
+        action: CONSUME
+        accepted_item:
+          reward_group: dungeon_items
+
+
+
+
+  anyphone_faction_collect:
+    title: "§f稙뀀稤"
+    size: 54
+    buttons:
+      check_button_faction_collect:
+        slot: [ 52 ]
+        type: BUTTON
+        action: COMMAND
+        logic: "player:anyphone_faction"
+        design:
+          material: DIAMOND
+          name: "Close Collection"
+          custom_model_data: 0
+
+      retrieve_slot_faction_collect:
+        slot: [ 47, 49, 51 ]
+        type: OUTPUT_SLOT
+        action: REWARD_GET
+        reward_group: faction_items
+
+
+  anyphone_faction:
+    title: "§f稙稬稤"
+    size: 54
+    buttons:
+      anyfaction_open_collect:
+        slot: [ 52 ]
+        type: BUTTON
+        action: COMMAND
+        logic: "player:anyphone_faction_collect"
+        design:
+          material: DIAMOND
+          name: "Collect Faction Items"
+          custom_model_data: 0
 
 poison:
   poison-world: "dungeon_build"
   poison-block: "minecraft:tripwire[attached=false,disarmed=true,east=true,north=false,powered=false,west=true]"
 
 
-recipe-book-command: "enderlink"
+recipe-book-command: "anyphone_home"

@@ -4,6 +4,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
@@ -300,7 +301,19 @@ public class GuiBuilder {
         Map<Integer, Integer> payouts = guiPayoutAmounts.getOrDefault(guiKey, Collections.emptyMap());
 
         if (logics.containsKey(slot)) {
-            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), logics.get(slot).replace("%player%", player.getName()));
+            String raw = logics.get(slot).replace("%player%", player.getName());
+            CommandSender sender;
+            if (raw.startsWith("console:")) {
+                sender = Bukkit.getConsoleSender();
+                raw = raw.substring("console:".length());
+            } else if (raw.startsWith("player:")) {
+                sender = player;
+                raw = raw.substring("player:".length());
+            } else {
+                sender = player;
+            }
+            if (raw.startsWith("/")) raw = raw.substring(1);
+            Bukkit.dispatchCommand(sender, raw.trim());
         } else if (outputs.containsKey(slot)) {
             Material mat = Material.matchMaterial(outputs.get(slot));
             if (mat != null) player.getInventory().addItem(new ItemStack(mat, payouts.getOrDefault(slot, 1)));
