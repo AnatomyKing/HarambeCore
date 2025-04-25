@@ -52,7 +52,7 @@ public class HarambeCore extends JavaPlugin implements Listener {
 
         // Initialize plugin components
         this.itemRegistry = new MythicMobsRegistry();
-        this.guiBuilder = new GuiBuilder(this, config);
+        this.guiBuilder = new GuiBuilder(this, config, itemRegistry);
         RewardGroupManager rewardGroupManager = new RewardGroupManager(this);
         PlayerRewardData playerRewardData = new PlayerRewardData(getDataFolder());
         this.rewardHandler = new RewardHandler(rewardGroupManager, playerRewardData);
