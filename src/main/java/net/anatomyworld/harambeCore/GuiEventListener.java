@@ -88,11 +88,22 @@ public class GuiEventListener implements Listener {
                 if (cur == null || cur.getType().isAir()) return;
 
                 if (accepted.containsKey(slot)) {
-                    Material m = Material.matchMaterial(accepted.get(slot));
-                    if (m == null || cur.getType() != m) {
-                        e.setCancelled(true);
-                        p.sendMessage("§cOnly " + accepted.get(slot));
-                        return;
+                    String expected = accepted.get(slot);
+                    if (expected.startsWith("MYTHIC:")) {
+                        String expectedId = expected.substring("MYTHIC:".length());
+                        if (!rewardHandler.getMythic().isMythicItem(cur) ||
+                                !expectedId.equalsIgnoreCase(rewardHandler.getMythic().getMythicTypeFromItem(cur))) {
+                            e.setCancelled(true);
+                            p.sendMessage("§cOnly Mythic item: " + expectedId);
+                            return;
+                        }
+                    } else {
+                        Material m = Material.matchMaterial(expected);
+                        if (m == null || cur.getType() != m) {
+                            e.setCancelled(true);
+                            p.sendMessage("§cOnly " + expected);
+                            return;
+                        }
                     }
                 }
 

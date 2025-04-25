@@ -175,12 +175,18 @@ public class GuiBuilder {
                         } else if (bc.isConfigurationSection("accepted_item")) {
                             ConfigurationSection ai = bc.getConfigurationSection("accepted_item");
                             assert ai != null;
+
                             String mat = ai.getString("material");
+                            String mythic = ai.getString("mythic");
                             int amount = ai.getInt("amount", -1);
                             String rGroupInner = ai.getString("reward_group", null);
-                            if (mat != null) for (int s : slots) acceptedItems.put(s, mat.toUpperCase(Locale.ROOT));
-                            if (amount > 0) for (int s : slots) acceptedAmounts.put(s, amount);
-                            if (rGroupInner != null) for (int s : slots) rewardGroups.put(s, rGroupInner);
+
+                            for (int s : slots) {
+                                if (mat != null) acceptedItems.put(s, mat.toUpperCase(Locale.ROOT));
+                                if (mythic != null) acceptedItems.put(s, "MYTHIC:" + mythic);
+                                if (amount > 0) acceptedAmounts.put(s, amount);
+                                if (rGroupInner != null) rewardGroups.put(s, rGroupInner);
+                            }
                         }
 
                         for (int s : slots) {
