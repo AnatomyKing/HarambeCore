@@ -1,5 +1,6 @@
 package net.anatomyworld.harambeCore;
 
+import net.anatomyworld.harambeCore.gui.storage.StorageManager;
 import net.anatomyworld.harambeCore.item.ItemRegistry;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -18,7 +19,7 @@ import java.util.*;
 
 public class GuiBuilder {
 
-    public enum SlotType {BUTTON, INPUT_SLOT, CHECK_BUTTON, OUTPUT_SLOT, FILLER}
+    public enum SlotType {BUTTON, INPUT_SLOT, CHECK_BUTTON, OUTPUT_SLOT, FILLER, STORAGE_SLOT}
     public enum ActionType {COMMAND, GIVE, REWARD_GET}
     public enum InputActionType {NONE, CONSUME}
 
@@ -42,10 +43,13 @@ public class GuiBuilder {
     private final ItemRegistry itemRegistry;
     private FileConfiguration  config;
     private ItemStack          cachedFillerItem;
+    private final StorageManager storageManager;
 
-    public GuiBuilder(JavaPlugin plugin, FileConfiguration config, ItemRegistry itemRegistry) {
+
+    public GuiBuilder(JavaPlugin plugin, FileConfiguration config, ItemRegistry itemRegistry, StorageManager storageManager) {
         this.config          = config;
         this.itemRegistry    = itemRegistry;
+        this.storageManager = storageManager;
         this.cachedFillerItem = createFillerItem();
     }
 
@@ -95,7 +99,7 @@ public class GuiBuilder {
     public void createAndOpenGui(String guiKey, Player player) {
         Inventory gui = playerGuis
                 .computeIfAbsent(player.getUniqueId(), k -> new HashMap<>())
-                .computeIfAbsent(guiKey, k -> generateGui(guiKey));
+                .computeIfAbsent(guiKey, k -> generateGui(guiKey, player.getUniqueId()));
         if (gui != null) player.openInventory(gui);
         else player.sendMessage("§cInvalid GUI configuration for '" + guiKey + "'!");
     }
@@ -104,7 +108,7 @@ public class GuiBuilder {
     /*               GUI creation & parsing                            */
     /* --------------------------------------------------------------- */
 
-    private Inventory generateGui(String guiKey) {
+    private Inventory generateGui(String guiKey, UUID playerId) {
         ConfigurationSection guiSection = config.getConfigurationSection("gui." + guiKey);
         if (guiSection == null) return null;
 
@@ -198,6 +202,14 @@ public class GuiBuilder {
                             if (costPS)      perStackMap.put(s, true);
                             if (costPay)     payoutMap.put(s, true);
                             if (rGroup != null && at == ActionType.REWARD_GET) rewardGroups.put(s, rGroup);
+                        }
+                    }
+
+                    case STORAGE_SLOT -> {
+                        Map<Integer, ItemStack> storage = storageManager.getOrCreateStorage(playerId, guiKey);
+                        for (int s : slots) {
+                            slotTypes.put(s, slotType);
+                            if (storage.containsKey(s)) gui.setItem(s, storage.get(s));
                         }
                     }
 
@@ -359,6 +371,24 @@ public class GuiBuilder {
                 else player.sendMessage("§cInvalid output_item: " + raw);
             }
         }
+    }
+
+    public void handleGuiClose(Player player, Inventory inv) {
+        String guiKey = getGuiKeyByInventory(player, inv);
+        if (guiKey == null) return;
+
+        Map<Integer, SlotType> slots = guiSlotTypes.getOrDefault(guiKey, Collections.emptyMap());
+        Map<Integer, ItemStack> storage = storageManager.getOrCreateStorage(player.getUniqueId(), guiKey);
+
+        for (Map.Entry<Integer, SlotType> entry : slots.entrySet()) {
+            if (entry.getValue() != SlotType.STORAGE_SLOT) continue;
+            int slot = entry.getKey();
+            ItemStack item = inv.getItem(slot);
+            if (item == null || item.getType() == Material.AIR) storage.remove(slot);
+            else storage.put(slot, item.clone());
+        }
+
+        storageManager.savePlayerStorage(player.getUniqueId());
     }
 
     /* --------------- helper: get gui key ----------------------- */

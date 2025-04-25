@@ -1,5 +1,6 @@
 package net.anatomyworld.harambeCore;
 
+import net.anatomyworld.harambeCore.gui.storage.StorageManager;
 import net.anatomyworld.harambeCore.item.ItemRegistry;
 import net.anatomyworld.harambeCore.item.MythicMobsRegistry;
 import net.anatomyworld.harambeCore.item.PlayerRewardData;
@@ -30,6 +31,8 @@ public class HarambeCore extends JavaPlugin implements Listener {
     private GuiBuilder guiBuilder;
     private CommandHandler commandHandler;
     private RecipeBookPacketListener recipeBookPacketListener;
+    private StorageManager storageManager;
+
 
     // These are now instance fields to allow correct passing into listeners
     private RewardHandler rewardHandler;
@@ -52,7 +55,8 @@ public class HarambeCore extends JavaPlugin implements Listener {
 
         // Initialize plugin components
         this.itemRegistry = new MythicMobsRegistry();
-        this.guiBuilder = new GuiBuilder(this, config, itemRegistry);
+        this.storageManager = new StorageManager(this);
+        this.guiBuilder = new GuiBuilder(this, config, itemRegistry, storageManager);
         RewardGroupManager rewardGroupManager = new RewardGroupManager(this);
         PlayerRewardData playerRewardData = new PlayerRewardData(getDataFolder());
         this.rewardHandler = new RewardHandler(rewardGroupManager, playerRewardData);
@@ -83,6 +87,9 @@ public class HarambeCore extends JavaPlugin implements Listener {
         }
 
         getLogger().info("§cHarambeCore has been disabled!");
+
+        storageManager.onShutdown();
+
     }
 
     public void reloadPlugin() {

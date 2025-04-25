@@ -56,6 +56,8 @@ public class GuiEventListener implements Listener {
     @EventHandler
     public void onInventoryClose(InventoryCloseEvent e) {
         if (!(e.getPlayer() instanceof Player p)) return;
+        guiBuilder.handleGuiClose(p, e.getInventory());
+
         if (e.getInventory().getType() == InventoryType.WORKBENCH)
             RecipeBookUtils.forceCloseClientRecipeBook(p);
     }
