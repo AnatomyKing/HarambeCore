@@ -29,6 +29,8 @@ public class GuiEventListener implements Listener {
         this.itemRegistry  = itemRegistry;
     }
 
+    /* ---------------- open / close / drag ---------------- */
+
     @EventHandler
     public void onInventoryOpen(InventoryOpenEvent e) {
         if (!(e.getPlayer() instanceof Player p)) return;
@@ -42,6 +44,23 @@ public class GuiEventListener implements Listener {
                 paintRetrieval(e.getInventory(), slotTypes, groupMap, group,
                         rewardHandler.getPlayerRewardData().getAllRewards(p.getUniqueId(), group)));
     }
+
+    @EventHandler
+    public void onInventoryDrag(InventoryDragEvent e) {
+        if (!(e.getWhoClicked() instanceof Player p)) return;
+        if (guiBuilder.getGuiKeyByInventory(p, e.getInventory()) == null) return;
+        e.setCancelled(true);
+        p.sendMessage("§cDragging is disabled in this GUI.");
+    }
+
+    @EventHandler
+    public void onInventoryClose(InventoryCloseEvent e) {
+        if (!(e.getPlayer() instanceof Player p)) return;
+        if (e.getInventory().getType() == InventoryType.WORKBENCH)
+            RecipeBookUtils.forceCloseClientRecipeBook(p);
+    }
+
+    /* ---------------- central click handler --------------- */
 
     @EventHandler
     public void onInventoryClick(InventoryClickEvent e) {
@@ -60,7 +79,7 @@ public class GuiEventListener implements Listener {
         int clicked = e.getSlot();
         if (e.getRawSlot() >= e.getInventory().getSize()) return;
 
-        Map<Integer, SlotType> slotTypes  = guiBuilder.getGuiSlotTypes().get(guiKey);
+        Map<Integer, SlotType> slotTypes   = guiBuilder.getGuiSlotTypes().get(guiKey);
         SlotType st = slotTypes.get(clicked);
         if (st == null) return;
 
@@ -68,6 +87,7 @@ public class GuiEventListener implements Listener {
         Map<Integer, Integer>        amounts    = guiBuilder.getAcceptedAmounts(guiKey);
         Map<Integer, Double>         costs      = guiBuilder.getSlotCosts(guiKey);
         Map<Integer, Boolean>        perStack   = guiBuilder.getCostPerStack(guiKey);
+        Map<Integer, Boolean>        costPay    = guiBuilder.getCostIsPayout(guiKey);
         Map<Integer, InputActionType>actions    = guiBuilder.getInputActions(guiKey);
         Map<Integer, List<Integer>>  conn       = guiBuilder.getSlotConnections(guiKey);
         Map<Integer, Integer>        reverse    = guiBuilder.getReverseSlotConnections(guiKey);
@@ -76,20 +96,29 @@ public class GuiEventListener implements Listener {
 
         switch (st) {
 
+            /* ---------------- BUTTON ---------------- */
             case BUTTON -> {
-                double fee = costs.getOrDefault(clicked, 0.0);
+                double fee   = costs.getOrDefault(clicked, 0.0);
+                boolean give = costPay.getOrDefault(clicked, false);
+
                 e.setCancelled(true);
-                if (fee > 0 && !EconomyHandler.withdrawBalance(p, fee)) {
-                    p.sendMessage("§cYou need " + fee);
-                    return;
+                if (fee > 0) {
+                    if (give) {
+                        EconomyHandler.depositBalance(p, fee);
+                    } else if (!EconomyHandler.withdrawBalance(p, fee)) {
+                        p.sendMessage("§cYou need " + fee);
+                        return;
+                    }
                 }
                 guiBuilder.handleButtonClick(p, guiKey, clicked);
             }
 
+            /* ---------------- INPUT_SLOT ------------ */
             case INPUT_SLOT -> {
                 ItemStack cur = e.getCursor();
-                if (cur == null || cur.getType().isAir()) return;
+                if (cur.getType().isAir()) return;
 
+                /* --- accepted item / mythic check --- */
                 if (accepted.containsKey(clicked)) {
                     String expected = accepted.get(clicked);
                     if (expected.toUpperCase(Locale.ROOT).startsWith("MYTHIC:")) {
@@ -110,6 +139,7 @@ public class GuiEventListener implements Listener {
                     }
                 }
 
+                /* --- reward group filter --- */
                 if (groupMap.containsKey(clicked)) {
                     String expectedGroup = groupMap.get(clicked);
                     String key = resolveKey(cur);
@@ -122,38 +152,43 @@ public class GuiEventListener implements Listener {
                     }
                 }
 
+                /* --- exact amount check --- */
                 if (amounts.containsKey(clicked) && cur.getAmount() != amounts.get(clicked)) {
                     e.setCancelled(true);
                     p.sendMessage("§cYou must place exactly " + amounts.get(clicked));
                     return;
                 }
 
-                InputActionType ia = actions.getOrDefault(clicked, InputActionType.NONE);
-                boolean deferred   = reverse.containsKey(clicked); // connected to CHECK_BUTTON
+                InputActionType ia      = actions.getOrDefault(clicked, InputActionType.NONE);
+                boolean deferredConsume = reverse.containsKey(clicked);
 
-                if (ia == InputActionType.CONSUME && !deferred) {
-                    double unitCost = costs.getOrDefault(clicked, 0.0);
-                    double totalCost = unitCost * (perStack.getOrDefault(clicked, false) ? cur.getAmount() : 1);
-                    if (totalCost > 0 && !EconomyHandler.withdrawBalance(p, totalCost)) {
-                        e.setCancelled(true);
-                        p.sendMessage("§cYou need " + totalCost);
-                        return;
+                /* --- immediate consume branch --- */
+                if (ia == InputActionType.CONSUME && !deferredConsume) {
+                    double unit = costs.getOrDefault(clicked, 0.0);
+                    int    mul  = perStack.getOrDefault(clicked, false) ? cur.getAmount() : 1;
+                    double sum  = unit * mul;
+
+                    if (sum > 0) {
+                        if (costPay.getOrDefault(clicked, false))
+                            EconomyHandler.depositBalance(p, sum);
+                        else if (!EconomyHandler.withdrawBalance(p, sum)) {
+                            e.setCancelled(true);
+                            p.sendMessage("§cYou need " + sum);
+                            return;
+                        }
                     }
 
                     rewardHandler.queueReward(p.getUniqueId(), cur.clone());
 
-                    int toRemove = perStack.getOrDefault(clicked, false) ? cur.getAmount() : 1;
-                    if (toRemove >= cur.getAmount()) {
-                        e.getView().setCursor(null);                        // ← no deprecation
-                    } else {
-                        cur.setAmount(cur.getAmount() - toRemove);
-                    }
+                    if (mul >= cur.getAmount()) e.getView().setCursor(null);
+                    else cur.setAmount(cur.getAmount() - mul);
 
                     e.setCancelled(true);
                     p.sendMessage("§aDeposited!");
                 }
             }
 
+            /* ---------------- CHECK_BUTTON ---------- */
             case CHECK_BUTTON -> {
                 e.setCancelled(true);
 
@@ -185,9 +220,13 @@ public class GuiEventListener implements Listener {
                 }
 
                 double fee = costs.getOrDefault(clicked, 0.0);
-                if (fee > 0 && !EconomyHandler.withdrawBalance(p, fee)) {
-                    p.sendMessage("§cYou need " + fee);
-                    return;
+                if (fee > 0) {
+                    if (costPay.getOrDefault(clicked, false))
+                        EconomyHandler.depositBalance(p, fee);
+                    else if (!EconomyHandler.withdrawBalance(p, fee)) {
+                        p.sendMessage("§cYou need " + fee);
+                        return;
+                    }
                 }
 
                 for (int s : targets) {
@@ -195,21 +234,26 @@ public class GuiEventListener implements Listener {
                     if (it != null) rewardHandler.queueReward(p.getUniqueId(), it);
 
                     if (actions.getOrDefault(s, InputActionType.NONE) == InputActionType.CONSUME) {
-                        if (it != null) {
-                            int toRemove = perStack.getOrDefault(s, false) ? it.getAmount() : 1;
-                            int remaining = it.getAmount() - toRemove;
-                            if (remaining > 0) it.setAmount(remaining);
-                            else e.getInventory().setItem(s, null);
+                        int rem;
+                        if (perStack.getOrDefault(s, false)) {
+                            assert it != null;
+                            rem = it.getAmount();
+                        } else {
+                            rem = 1;
                         }
+                        assert it != null;
+                        int left = it.getAmount() - rem;
+                        if (left > 0) it.setAmount(left);
+                        else e.getInventory().setItem(s, null);
                     }
                 }
 
                 guiBuilder.handleButtonClick(p, guiKey, clicked);
-
                 paintRetrieval(e.getInventory(), slotTypes, groupMap, group,
                         rewardHandler.getPlayerRewardData().getAllRewards(p.getUniqueId(), group));
             }
 
+            /* ---------------- OUTPUT_SLOT ---------- */
             case OUTPUT_SLOT -> {
                 e.setCancelled(true);
                 String group = groupMap.get(clicked);
@@ -237,6 +281,8 @@ public class GuiEventListener implements Listener {
         }
     }
 
+    /* ---------------- helper methods ---------------- */
+
     private String resolveKey(ItemStack stack) {
         if (rewardHandler.getMythic().isMythicItem(stack))
             return rewardHandler.getMythic().getMythicTypeFromItem(stack);
@@ -257,7 +303,7 @@ public class GuiEventListener implements Listener {
     }
 
     private List<Integer> outputSlotsForGroup(Map<Integer, SlotType> slotTypes,
-                                              Map<Integer, String> groupMap,
+                                              Map<Integer, String>  groupMap,
                                               String group) {
         List<Integer> list = new ArrayList<>();
         groupMap.forEach((slot, grp) -> {
@@ -268,18 +314,5 @@ public class GuiEventListener implements Listener {
         return list;
     }
 
-    @EventHandler
-    public void onInventoryDrag(InventoryDragEvent e) {
-        if (!(e.getWhoClicked() instanceof Player p)) return;
-        if (guiBuilder.getGuiKeyByInventory(p, e.getInventory()) == null) return;
-        e.setCancelled(true);
-        p.sendMessage("§cDragging is disabled in this GUI.");
-    }
 
-    @EventHandler
-    public void onInventoryClose(InventoryCloseEvent e) {
-        if (!(e.getPlayer() instanceof Player p)) return;
-        if (e.getInventory().getType() == InventoryType.WORKBENCH)
-            RecipeBookUtils.forceCloseClientRecipeBook(p);
-    }
 }

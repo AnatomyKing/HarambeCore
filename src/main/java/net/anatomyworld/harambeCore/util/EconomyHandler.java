@@ -12,50 +12,39 @@ public class EconomyHandler {
 
     public static boolean setupEconomy() {
         if (Bukkit.getPluginManager().getPlugin("Vault") == null) {
-            Bukkit.getLogger().severe("[EconomyHandler] Vault plugin not found. Economy cannot be initialized.");
+            Bukkit.getLogger().severe("[EconomyHandler] Vault plugin not found.");
             return false;
         }
-
         RegisteredServiceProvider<Economy> rsp = Bukkit.getServicesManager().getRegistration(Economy.class);
         if (rsp == null) {
-            Bukkit.getLogger().severe("[EconomyHandler] No Vault-compatible economy plugin found.");
+            Bukkit.getLogger().severe("[EconomyHandler] No Vault-compatible economy detected.");
             return false;
         }
-
         economy = rsp.getProvider();
         return economy != null;
     }
 
-    public static boolean hasEnoughBalance(Player player, double amount) {
-        if (economy == null) {
-            Bukkit.getLogger().warning("[EconomyHandler] Economy not initialized. Cannot check balance.");
-            return false;
-        }
-        return economy.has(player, amount);
+    public static boolean withdrawBalance(Player player, double amount) {
+        if (economy == null) return false;
+        EconomyResponse r = economy.withdrawPlayer(player, amount);
+        if (!r.transactionSuccess())
+            Bukkit.getLogger().warning("[EconomyHandler] Withdraw failed: " + r.errorMessage);
+        return r.transactionSuccess();
     }
 
-    public static boolean withdrawBalance(Player player, double amount) {
-        if (economy == null) {
-            Bukkit.getLogger().warning("[EconomyHandler] Economy not initialized. Cannot withdraw balance.");
-            return false;
-        }
+    public static boolean depositBalance(Player player, double amount) {
+        if (economy == null) return false;
+        EconomyResponse r = economy.depositPlayer(player, amount);
+        if (!r.transactionSuccess())
+            Bukkit.getLogger().warning("[EconomyHandler] Deposit failed: " + r.errorMessage);
+        return r.transactionSuccess();
+    }
 
-        EconomyResponse response = economy.withdrawPlayer(player, amount);
-        if (!response.transactionSuccess()) {
-            Bukkit.getLogger().warning("[EconomyHandler] Failed to withdraw " + amount + " from " + player.getName() + ". Reason: " + response.errorMessage);
-        }
-        return response.transactionSuccess();
+    public static boolean hasEnoughBalance(Player player, double amount) {
+        return economy != null && economy.has(player, amount);
     }
 
     public static double getBalance(Player player) {
-        if (economy == null) {
-            Bukkit.getLogger().warning("[EconomyHandler] Economy not initialized. Returning balance as 0.");
-            return 0.0;
-        }
-        return economy.getBalance(player);
-    }
-
-    public static Economy getEconomy() {
-        return economy;
+        return economy == null ? 0.0 : economy.getBalance(player);
     }
 }
