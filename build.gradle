@@ -49,7 +49,7 @@ processResources {
 }
 
 jar {
-    archiveBaseName.set("HarambeCoreAddon")
+    archiveBaseName.set("HarambeCore")
 }
 
 // Add run server task

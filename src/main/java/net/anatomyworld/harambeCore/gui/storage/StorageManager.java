@@ -53,8 +53,12 @@ public class StorageManager implements Listener {
     /* --------------------------------------------------------------------- */
 
     public void onShutdown() {
-        saveAll();
+        // Save synchronously on the main thread to avoid IllegalPluginAccessException
+        for (UUID uuid : playerCache.keySet()) {
+            savePlayerStorageSync(uuid);
+        }
     }
+
 
     public Map<Integer, ItemStack> getOrCreateStorage(UUID uuid, String guiKey) {
         return playerCache
@@ -124,6 +128,30 @@ public class StorageManager implements Listener {
                 plugin.getLogger().severe("Failed to save GUI data for " + uuid + ": " + ex.getMessage());
             }
         });
+    }
+
+
+    private void savePlayerStorageSync(UUID uuid) {
+        File file = new File(dataFolder, uuid + ".yml");
+        YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
+
+        yaml.set("gui", null);
+
+        Map<String, Map<Integer, ItemStack>> guiMap = playerCache.get(uuid);
+        if (guiMap != null) {
+            for (var guiEntry : guiMap.entrySet()) {
+                String guiKey = guiEntry.getKey();
+                for (var slotEntry : guiEntry.getValue().entrySet()) {
+                    yaml.set("gui." + guiKey + "." + slotEntry.getKey(), slotEntry.getValue());
+                }
+            }
+        }
+
+        try {
+            yaml.save(file);
+        } catch (IOException ex) {
+            plugin.getLogger().severe("Failed to save GUI data for " + uuid + ": " + ex.getMessage());
+        }
     }
 
     private void saveAll() {

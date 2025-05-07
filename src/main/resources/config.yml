@@ -1,10 +1,9 @@
 filler:
   material: "RABBIT_FOOT"
   custom_model_data: 27104
-  name: "&8" # Gray invisible name for filler slots
+  name: "&8" # "BLACK_STAINED_GLASS_PANE" invisible name for filler slots
 
 gui:
-
 
   anyphone_home_collect:
     title: "§f稙뀀稤"
@@ -47,7 +46,7 @@ gui:
     size: 54
     buttons:
       dungeonone_submit_button:
-        slot: [ 19 ]
+        slot: [ 52 ]
         type: CHECK_BUTTON
         slot_connection: dungeonone_submit_slot
         check_item:
@@ -147,6 +146,186 @@ gui:
           name: "Collect Faction Items"
           custom_model_data: 0
 
+
+  anyphone_faction_submit:
+    title: "§f稙稧稤"
+    size: 54
+    buttons:
+      anyfaction_submit_button:
+        slot: [ 52 ]
+        type: CHECK_BUTTON
+        slot_connection: anyfaction_submit_slot
+        cost: 64
+        check_item:
+          reward_group: faction_items
+        design:
+          material: DIAMOND
+          name: "Submit faction Items"
+          custom_model_data: 0
+
+      anyfaction_submit_slot:
+        slot: [ 49 ]
+        type: INPUT_SLOT
+        action: CONSUME
+        accepted_item:
+          reward_group: faction_items
+
+  bananabuddy_widthdraw:
+    title: "§f뀥뀧"
+    size: 45
+    buttons:
+
+      bananapearl_collect_1:
+        slot: [ 2 ]
+        type: BUTTON
+        action: GIVE
+        output_item:
+          material: DIAMOND
+          amount: 1
+        cost: 1
+        design:
+          material: RABBIT_FOOT
+          name: "Withdraw β1"
+          custom_model_data: 27142
+
+      bananapearl_collect_5:
+        slot: [ 3 ]
+        type: BUTTON
+        action: GIVE
+        output_item:
+          material: DIAMOND
+          amount: 5
+        cost: 5
+        design:
+          material: RABBIT_FOOT
+          name: "Withdraw β5"
+          custom_model_data: 27143
+
+      bananapearl_collect_15:
+        slot: [ 4 ]
+        type: BUTTON
+        action: GIVE
+        output_item:
+          material: DIAMOND
+          amount: 15
+        cost: 15
+        design:
+          material: RABBIT_FOOT
+          name: "Withdraw β15"
+          custom_model_data: 27144
+
+      bananapearl_collect_50:
+        slot: [ 5 ]
+        type: BUTTON
+        action: GIVE
+        output_item:
+          material: DIAMOND
+          amount: 50
+        cost: 50
+        design:
+          material: RABBIT_FOOT
+          name: "Withdraw β50"
+          custom_model_data: 27145
+
+      bananapearl_collect_100:
+        slot: [ 6 ]
+        type: BUTTON
+        action: GIVE
+        output_item:
+          material: DIAMOND
+          amount: 100
+        cost: 100
+        design:
+          material: RABBIT_FOOT
+          name: "Withdraw β100"
+          custom_model_data: 27146
+
+      bananabuddy_deposit_button:
+        slot: [ 20 ]
+        type: BUTTON
+        action: COMMAND
+        logic: "player:bananabuddy_deposit"
+        design:
+          material: RABBIT_FOOT
+          name: "Deposit"
+          custom_model_data: 27115
+
+      withdraw_animation_1:
+        type: BUTTON
+        slot: [ 12 ]
+        design:
+          material: "RABBIT_FOOT"
+          custom_model_data: 27084
+          name: "&8"
+
+      withdraw_animation_2:
+        type: BUTTON
+        slot: [ 14 ]
+        design:
+          material: "RABBIT_FOOT"
+          custom_model_data: 27089
+          name: "&8"
+
+
+
+  bananabuddy_deposit:
+    title: "§f뀦뀧"
+    size: 45
+    buttons:
+
+      loading_icon:
+        type: BUTTON
+        slot: [ 13 ]
+        design:
+          material: "RABBIT_FOOT"
+          custom_model_data: 27090
+          name: "&8"
+
+      bananabuddy_withdraw_button:
+        slot: [ 24 ]
+        type: BUTTON
+        action: COMMAND
+        logic: "player:bananabuddy_widthdraw"
+        design:
+          material: RABBIT_FOOT
+          name: "Withdraw"
+          custom_model_data: 27116
+
+      bananapearl_deposit:
+        slot: [ 38, 39, 40, 41, 42 ]
+        type: INPUT_SLOT
+        action: CONSUME
+        cost:
+          eco: 1
+          per_stack: true
+          payout: true
+        accepted_item:
+          mythic: RewardSword
+
+      deposit_animation_1:
+        type: BUTTON
+        slot: [ 12 ]
+        design:
+          material: "RABBIT_FOOT"
+          custom_model_data: 27109
+          name: "&8"
+
+      deposit_animation_2:
+        type: BUTTON
+        slot: [ 14 ]
+        design:
+          material: "RABBIT_FOOT"
+          custom_model_data: 27114
+          name: "&8"
+
+  player_storage:
+    title: "&eStorage Chest"
+    size: 54
+    buttons:
+      storage:
+        type: STORAGE_SLOT
+        slot: [ 10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25 ]
+
 poison:
   poison-world: "dungeon_build"
   poison-block: "minecraft:tripwire[attached=false,disarmed=true,east=true,north=false,powered=false,west=true]"
@@ -156,4 +335,3 @@ recipe-book-commands:
   world: "anyphone_home"
   world_nether: "anyphone_faction"
   world_faction_island: "anyphone_faction"
-
