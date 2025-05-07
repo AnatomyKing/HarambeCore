@@ -222,10 +222,15 @@ public class GuiBuilder {
                         int    payAmt  = 1;
                         Object oi      = bc.get("output_item");
                         if (oi instanceof ConfigurationSection oc) {
-                            if (oc.contains("material"))
-                                outItem = Objects.requireNonNull(oc.getString("material")).toUpperCase(Locale.ROOT);
-                            else if (oc.contains("mythic"))
-                                outItem = "MYTHIC:" + oc.getString("mythic");
+                            String myth = oc.getString("mythic");
+                            String mat = oc.getString("material");
+
+                            if (myth != null && !myth.isEmpty()) {
+                                outItem = "MYTHIC:" + myth;
+                            } else if (mat != null && !mat.isEmpty()) {
+                                outItem = mat.toUpperCase(Locale.ROOT);
+                            }
+
                             payAmt = oc.getInt("amount", 1);
                         } else if (oi instanceof String s) {
                             outItem = s.toUpperCase(Locale.ROOT);
