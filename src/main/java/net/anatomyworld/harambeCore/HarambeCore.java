@@ -1,5 +1,7 @@
 package net.anatomyworld.harambeCore;
 
+
+import net.anatomyworld.harambeCore.dialogue.DialogueListeners;
 import net.anatomyworld.harambeCore.gui.storage.StorageManager;
 import net.anatomyworld.harambeCore.item.ItemRegistry;
 import net.anatomyworld.harambeCore.item.MythicMobsRegistry;
@@ -52,6 +54,7 @@ public class HarambeCore extends JavaPlugin implements Listener {
         saveDefaultConfig();
         this.config = getConfig();
         ensureDataFolders();
+        getServer().getPluginManager().registerEvents(new DialogueListeners(), this);
 
         // Initialize plugin components
         this.itemRegistry = new MythicMobsRegistry();
