@@ -23,8 +23,10 @@ public class DialogueListeners implements Listener {
     public void onSwap(PlayerSwapHandItemsEvent event) {
         Player player = event.getPlayer();
         if (DialogueManager.isDialogueActive(player)) {
+            if (!DialogueManager.isLooping(player)) {
+                event.setCancelled(true);
+            }
             DialogueManager.nextLine(player);
-            event.setCancelled(true);
         }
     }
 }

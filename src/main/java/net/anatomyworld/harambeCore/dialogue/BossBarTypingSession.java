@@ -11,11 +11,13 @@ import java.util.List;
 public class BossBarTypingSession {
     private final Player player;
     private final List<List<String>> pages;
-    private final long tickDelay; // delay between frames
+    private final long tickDelay;
     private int pageIndex = 0;
     private int frameIndex = 0;
     private BossBar bossBar;
     private BukkitRunnable task;
+    private boolean loopDirection = true;
+    private boolean loopStarted = false;
 
     public BossBarTypingSession(Player player, List<List<String>> pages, long tickDelay) {
         this.player = player;
@@ -37,17 +39,26 @@ public class BossBarTypingSession {
 
         List<String> frames = pages.get(pageIndex);
         frameIndex = 0;
+        loopDirection = true;
+        loopStarted = false;
 
         task = new BukkitRunnable() {
             @Override
             public void run() {
-                if (frameIndex >= frames.size()) {
-                    cancel();
-                    return;
+                if (frameIndex < frames.size()) {
+                    bossBar.name(Component.text(frames.get(frameIndex++)));
+                    if (frameIndex == frames.size()) {
+                        loopStarted = true;
+                    }
+                } else {
+                    if (frames.size() >= 2) {
+                        frameIndex = frames.size() - (loopDirection ? 2 : 1);
+                        loopDirection = !loopDirection;
+                        bossBar.name(Component.text(frames.get(frameIndex)));
+                    } else if (frames.size() == 1) {
+                        bossBar.name(Component.text(frames.get(0)));
+                    }
                 }
-
-                String frame = frames.get(frameIndex++);
-                bossBar.name(Component.text(frame));
             }
         };
         task.runTaskTimer(HarambeCore.getPlugin(HarambeCore.class), 0L, tickDelay);
@@ -62,5 +73,9 @@ public class BossBarTypingSession {
     public void stop() {
         if (task != null) task.cancel();
         if (bossBar != null) bossBar.removeViewer(player);
+    }
+
+    public boolean isLooping() {
+        return loopStarted;
     }
 }
