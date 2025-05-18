@@ -1,4 +1,4 @@
-package net.anatomyworld.harambeCore.util;
+package net.anatomyworld.harambeCore.util.recipebook;
 
 import net.minecraft.network.protocol.game.ClientboundRecipeBookSettingsPacket;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;

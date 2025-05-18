@@ -1,6 +1,6 @@
 package net.anatomyworld.harambeCore;
 
-import net.anatomyworld.harambeCore.gui.storage.StorageManager;
+import net.anatomyworld.harambeCore.storage.StorageManager;
 import net.anatomyworld.harambeCore.item.ItemRegistry;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;

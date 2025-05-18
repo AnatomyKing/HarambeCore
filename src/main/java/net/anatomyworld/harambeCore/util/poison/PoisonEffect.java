@@ -1,4 +1,4 @@
-package net.anatomyworld.harambeCore.util;
+package net.anatomyworld.harambeCore.util.poison;
 
 import net.kyori.adventure.text.Component;
 import org.bukkit.Material;

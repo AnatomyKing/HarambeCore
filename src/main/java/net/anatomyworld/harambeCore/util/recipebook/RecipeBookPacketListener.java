@@ -1,4 +1,4 @@
-package net.anatomyworld.harambeCore.util;
+package net.anatomyworld.harambeCore.util.recipebook;
 
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
