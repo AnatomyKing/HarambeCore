@@ -8,6 +8,7 @@ import net.anatomyworld.harambeCore.item.MythicMobsRegistry;
 import net.anatomyworld.harambeCore.item.PlayerRewardData;
 import net.anatomyworld.harambeCore.item.RewardGroupManager;
 import net.anatomyworld.harambeCore.item.RewardHandler;
+import net.anatomyworld.harambeCore.util.AdventureModeHandler;
 import net.anatomyworld.harambeCore.util.EconomyHandler;
 import net.anatomyworld.harambeCore.util.PoisonEffect;
 import net.anatomyworld.harambeCore.util.RecipeBookPacketListener;
@@ -55,6 +56,8 @@ public class HarambeCore extends JavaPlugin implements Listener {
         this.config = getConfig();
         ensureDataFolders();
         getServer().getPluginManager().registerEvents(new DialogueListeners(), this);
+        getServer().getPluginManager().registerEvents(new AdventureModeHandler(this), this);
+
 
         // Initialize plugin components
         this.itemRegistry = new MythicMobsRegistry();
