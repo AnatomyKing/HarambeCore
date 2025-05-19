@@ -40,18 +40,18 @@ public final class HarambeCore extends JavaPlugin {
     public void onEnable() {
         logger.info("§aHarambeCore starting…");
 
-        // 1️⃣ Economy check
+        // Economy check
         if (!EconomyHandler.setupEconomy()) {
             logger.error("No Vault / economy plugin – disabling.");
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
 
-        // 2️⃣ Config + util folder
+        //  Config + util folder
         saveDefaultConfig();
         new File(getDataFolder(), "util").mkdirs();
 
-        // 3️⃣ Dialogue module (loads util/dialog-wiki.yml)
+        // Dialogue module (loads util/dialog-wiki.yml)
         dialogueModule = new DialogueModule(this);
         dialogueModule.enable();
         getServer().getPluginManager().registerEvents(
@@ -59,36 +59,37 @@ public final class HarambeCore extends JavaPlugin {
                 this
         );
 
-        // 4️⃣ Core listeners
+        // Core listeners
         getServer().getPluginManager().registerEvents(
                 new AdventureModeHandler(this),
                 this
         );
 
-        // 5️⃣ Registries & storage
+        // Registries & storage
         itemRegistry   = new MythicMobsRegistry();
         storageManager = new StorageManager(this);
 
-        // 6️⃣ Build GUI
+        // Build GUI
         guiBuilder = new GuiBuilder(this, getConfig(), itemRegistry, storageManager);
 
-        // 7️⃣ Load other util modules
+        //  Load other util modules
         poisonModule      = new PoisonModule(this);
-        recipeBookModule  = new RecipeBookModule(this);
+        recipeBookModule  = new RecipeBookModule(this, guiBuilder);
+
         rewardGroupModule = new RewardGroupModule(this);
 
         poisonModule.enable();
         recipeBookModule.enable();
         rewardGroupModule.enable();
 
-        // 8️⃣ Setup rewards
+        // Setup rewards
         PlayerRewardData playerData = new PlayerRewardData(this);
         rewardHandler = new RewardHandler(
                 rewardGroupModule.getManager(),
                 playerData
         );
 
-        // 9️⃣ Commands & GUI listener
+        //  Commands & GUI listener
         commandHandler = new CommandHandler(
                 this,
                 guiBuilder,

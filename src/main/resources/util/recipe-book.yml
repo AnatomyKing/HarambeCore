@@ -1,0 +1,4 @@
+recipe-book-commands:
+  world: "anyphone_home"
+  world_nether: "anyphone_faction"
+  world_faction_island: "anyphone_faction"

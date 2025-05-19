@@ -1,0 +1,17 @@
+reward-groups:
+  faction_items:
+    entries:
+      '1':
+        item: SkeletonKingSword
+        reward: KingsCrown
+  dungeon_items:
+    entries:
+      '1':
+        item: ItemSword
+        reward: RewardSword
+      '2':
+        item: ItemSwordTwo
+        reward: RewardSwordTwo
+      '3':
+        item: ItemSwordThree
+        reward: RewardSwordThree
