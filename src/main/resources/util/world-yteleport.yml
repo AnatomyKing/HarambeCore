@@ -1,0 +1,12 @@
+# util/world-yteleport.yml
+
+worlds:
+  world:
+    below: 1000
+    to-world: new
+    to-y: 1000
+
+  nether:
+    above: 128
+    to-world: overworld
+    to-y: 70

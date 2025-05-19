@@ -11,6 +11,7 @@ import net.anatomyworld.harambeCore.rewards.RewardGroupModule;
 import net.anatomyworld.harambeCore.storage.StorageManager;
 import net.anatomyworld.harambeCore.util.AdventureModeHandler;
 import net.anatomyworld.harambeCore.util.EconomyHandler;
+import net.anatomyworld.harambeCore.util.YLevelTeleportHandler;
 import net.anatomyworld.harambeCore.util.poison.PoisonModule;
 import net.anatomyworld.harambeCore.util.recipebook.RecipeBookModule;
 
@@ -35,6 +36,8 @@ public final class HarambeCore extends JavaPlugin {
     private PoisonModule       poisonModule;
     private RecipeBookModule   recipeBookModule;
     private RewardGroupModule  rewardGroupModule;
+    private YLevelTeleportHandler yLevelTeleportHandler;
+
 
     @Override
     public void onEnable() {
@@ -65,6 +68,11 @@ public final class HarambeCore extends JavaPlugin {
                 this
         );
 
+        yLevelTeleportHandler = new YLevelTeleportHandler(this);
+        getServer().getPluginManager().registerEvents(yLevelTeleportHandler, this);
+
+
+
         // Registries & storage
         itemRegistry   = new MythicMobsRegistry();
         storageManager = new StorageManager(this);
@@ -77,6 +85,8 @@ public final class HarambeCore extends JavaPlugin {
         recipeBookModule  = new RecipeBookModule(this, guiBuilder);
 
         rewardGroupModule = new RewardGroupModule(this);
+
+
 
         poisonModule.enable();
         recipeBookModule.enable();
@@ -124,6 +134,7 @@ public final class HarambeCore extends JavaPlugin {
         guiBuilder.updateConfig(getConfig());
         commandHandler.registerCommands();  // re-register after reload
         dialogueModule.enable();
+        yLevelTeleportHandler.reload();
         poisonModule.enable();
         recipeBookModule.enable();
         rewardGroupModule.enable();
