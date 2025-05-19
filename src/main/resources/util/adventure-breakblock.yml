@@ -1,0 +1,33 @@
+# util/adventure-breakblock.yml
+
+# Delay between re-tagging your pickaxe (in ticks):
+tick-delay: 20
+
+# A list of the NoteBlock states you want to allow breaking.
+note-blocks:
+  honeyore:
+    instrument: BASEDRUM
+    note: 6
+    powered: false
+
+  honeyoretwo:
+    instrument: BASEDRUM
+    note: 19
+    powered: false
+
+  honeyorethree:
+    instrument: BASEDRUM
+    note: 20
+    powered: false
+
+  honeyorefour:
+    instrument: BASEDRUM
+    note: 21
+    powered: false
+
+  honeyorefive:
+    instrument: BASEDRUM
+    note: 22
+    powered: false
+
+  # …add more entries here as needed

@@ -1,5 +1,6 @@
 package net.anatomyworld.harambeCore.util;
 
+import net.anatomyworld.harambeCore.config.YamlConfigLoader;
 import net.minecraft.advancements.critereon.BlockPredicate;
 import net.minecraft.advancements.critereon.StatePropertiesPredicate;
 import net.minecraft.core.component.DataComponents;
@@ -15,7 +16,6 @@ import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.level.block.state.properties.IntegerProperty;
 import net.minecraft.world.level.block.state.properties.NoteBlockInstrument;
-
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
@@ -25,47 +25,65 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.FileConfiguration;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class AdventureModeHandler implements Listener {
+    private final JavaPlugin plugin;
+    private final List<BlockPredicate> allowedPredicates = new ArrayList<>();
+    private final long tickDelay;
 
-    private final Plugin plugin;
-
-    public AdventureModeHandler(Plugin plugin) {
+    public AdventureModeHandler(JavaPlugin plugin) {
         this.plugin = plugin;
+
+        // 1️⃣ Load config
+        FileConfiguration cfg = YamlConfigLoader.load(plugin, "util/adventure-breakblock.yml");
+        this.tickDelay = cfg.getLong("tick-delay", 20L);
+
+        ConfigurationSection sec = cfg.getConfigurationSection("note-blocks");
+        if (sec != null) {
+            for (String key : sec.getKeys(false)) {
+                ConfigurationSection entry = sec.getConfigurationSection(key);
+                if (entry == null) continue;
+
+                try {
+                    NoteBlockInstrument inst = NoteBlockInstrument.valueOf(entry.getString("instrument", "").toUpperCase());
+                    int note  = entry.getInt("note");
+                    boolean powered = entry.getBoolean("powered", false);
+                    allowedPredicates.add(makePredicate(inst, note, powered));
+                } catch (IllegalArgumentException ex) {
+                    plugin.getLogger().warning("[AdventureBreak] invalid entry '" + key + "': " + ex.getMessage());
+                }
+            }
+        }
+
+        plugin.getLogger().info("[AdventureBreak] allowing " + allowedPredicates.size() + " note-block variants");
         startInterceptTask();
     }
 
-    /* ------------------------------------------------------------------
-       Event: allow the specific Note Block to break, block everything else
-       ------------------------------------------------------------------ */
     @EventHandler
     public void onBlockBreak(BlockBreakEvent event) {
         Player player = event.getPlayer();
         if (player.getGameMode() != GameMode.ADVENTURE) return;
 
         Block block = event.getBlock();
-
-        // We only ever allow our special note block
         if (block.getType() == Material.NOTE_BLOCK) {
-            // vanilla has already checked the CanBreak tag → let it proceed
-            event.setExpToDrop(0);      // optional: suppress duplicated XP
-            return;                     // DO NOT cancel
+            // let through, vanilla checks our CAN_BREAK tag
+            event.setExpToDrop(0);
+            return;
         }
-
-        event.setCancelled(true);       // everything else stays protected
+        event.setCancelled(true);
     }
 
     private boolean isPickaxe(Material mat) {
         return mat.name().endsWith("_PICKAXE");
     }
 
-    /* ------------------------------------------------------------------
-       Task: every second add the CanBreak tag to held pickaxes
-       ------------------------------------------------------------------ */
     private void startInterceptTask() {
         new BukkitRunnable() {
             @Override
@@ -73,54 +91,47 @@ public class AdventureModeHandler implements Listener {
                 for (Player p : Bukkit.getOnlinePlayers()) {
                     ServerPlayer nms = ((CraftPlayer) p).getHandle();
                     ItemStack held = nms.getMainHandItem();
-
                     if (!isPickaxe(held.getBukkitStack().getType())) continue;
 
                     ItemStack patched = injectCanBreak(held);
-
-                    /* 1. Update server-side inventory copy (crucial) */
                     if (!ItemStack.matches(held, patched)) {
                         nms.setItemInHand(InteractionHand.MAIN_HAND, patched);
                     }
 
-                    /* 2. Sync the hot-bar slot to the client */
                     int slot = 36 + nms.getInventory().selected;
                     nms.connection.send(new ClientboundContainerSetSlotPacket(
                             0, nms.containerMenu.getStateId(), slot, patched));
                 }
             }
-        }.runTaskTimer(plugin, 20L, 20L);    // start after 1 s, repeat every 1 s
+        }.runTaskTimer(plugin, 20L, tickDelay);
     }
 
-    /* ------------------------------------------------------------------
-       Helper: build CanBreak tag for note_block[instrument=harp,note=6,powered=false]
-       ------------------------------------------------------------------ */
     private ItemStack injectCanBreak(ItemStack original) {
-        // Skip if already tagged (cuts NBT spam)
         if (original.get(DataComponents.CAN_BREAK) != null) return original;
 
-        ItemStack copy = original.copy();
+        if (allowedPredicates.isEmpty()) {
+            return original; // ✅ Don't inject empty CAN_BREAK list
+        }
 
-        /* --- Build the state predicate --- */
-        EnumProperty<NoteBlockInstrument> instrument = NoteBlock.INSTRUMENT;
-        IntegerProperty note                    = NoteBlock.NOTE;
-        BooleanProperty powered                 = NoteBlock.POWERED;
+        ItemStack copy = original.copy();
+        AdventureModePredicate amp = new AdventureModePredicate(allowedPredicates, false);
+        copy.set(DataComponents.CAN_BREAK, amp);
+        return copy;
+    }
+
+    private BlockPredicate makePredicate(NoteBlockInstrument inst, int noteVal, boolean powered) {
+        EnumProperty<NoteBlockInstrument> instrProp = NoteBlock.INSTRUMENT;
+        IntegerProperty noteProp               = NoteBlock.NOTE;
+        BooleanProperty poweredProp            = NoteBlock.POWERED;
 
         StatePropertiesPredicate.Builder state = StatePropertiesPredicate.Builder.properties()
-                .hasProperty(instrument, NoteBlockInstrument.BASEDRUM)
-                .hasProperty(note, 6)
-                .hasProperty(powered, false);
+                .hasProperty(instrProp, inst)
+                .hasProperty(noteProp, noteVal)
+                .hasProperty(poweredProp, powered);
 
-        /* --- Wrap it in a BlockPredicate --- */
-        BlockPredicate predicate = BlockPredicate.Builder.block()
+        return BlockPredicate.Builder.block()
                 .of(BuiltInRegistries.BLOCK, Blocks.NOTE_BLOCK)
                 .setProperties(state)
                 .build();
-
-        AdventureModePredicate canBreak =
-                new AdventureModePredicate(List.of(predicate), false);
-
-        copy.set(DataComponents.CAN_BREAK, canBreak);
-        return copy;
     }
 }
