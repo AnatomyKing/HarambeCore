@@ -2,16 +2,17 @@ package net.anatomyworld.harambeCore;
 
 import net.anatomyworld.harambeCore.config.YamlConfigLoader;
 import net.anatomyworld.harambeCore.dialogue.DialogueListeners;
+import net.anatomyworld.harambeCore.dialogue.DialogueModule;
 import net.anatomyworld.harambeCore.item.ItemRegistry;
 import net.anatomyworld.harambeCore.item.MythicMobsRegistry;
 import net.anatomyworld.harambeCore.rewards.PlayerRewardData;
 import net.anatomyworld.harambeCore.rewards.RewardHandler;
+import net.anatomyworld.harambeCore.rewards.RewardGroupModule;
 import net.anatomyworld.harambeCore.storage.StorageManager;
 import net.anatomyworld.harambeCore.util.AdventureModeHandler;
 import net.anatomyworld.harambeCore.util.EconomyHandler;
 import net.anatomyworld.harambeCore.util.poison.PoisonModule;
 import net.anatomyworld.harambeCore.util.recipebook.RecipeBookModule;
-import net.anatomyworld.harambeCore.rewards.RewardGroupModule;
 
 import org.bukkit.plugin.java.JavaPlugin;
 import org.slf4j.Logger;
@@ -19,51 +20,59 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 
-/**
- * Main plugin entry point.
- */
 public final class HarambeCore extends JavaPlugin {
 
     public static final Logger logger = LoggerFactory.getLogger(HarambeCore.class);
 
-    private ItemRegistry     itemRegistry;
-    private GuiBuilder       guiBuilder;
-    private CommandHandler   commandHandler;
-    private StorageManager   storageManager;
-    private RewardHandler    rewardHandler;
+    private ItemRegistry       itemRegistry;
+    private GuiBuilder         guiBuilder;
+    private CommandHandler     commandHandler;
+    private StorageManager     storageManager;
+    private RewardHandler      rewardHandler;
 
     /* util modules */
-    private PoisonModule      poisonModule;
-    private RecipeBookModule  recipeBookModule;
-    private RewardGroupModule rewardGroupModule;
+    private DialogueModule     dialogueModule;
+    private PoisonModule       poisonModule;
+    private RecipeBookModule   recipeBookModule;
+    private RewardGroupModule  rewardGroupModule;
 
     @Override
     public void onEnable() {
         logger.info("§aHarambeCore starting…");
 
-        // 1. Economy check
+        // 1️⃣ Economy check
         if (!EconomyHandler.setupEconomy()) {
             logger.error("No Vault / economy plugin – disabling.");
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
 
-        // 2. Config + util folder
+        // 2️⃣ Config + util folder
         saveDefaultConfig();
         new File(getDataFolder(), "util").mkdirs();
 
-        // 3. Core listeners
-        getServer().getPluginManager().registerEvents(new DialogueListeners(), this);
-        getServer().getPluginManager().registerEvents(new AdventureModeHandler(this), this);
+        // 3️⃣ Dialogue module (loads util/dialog-wiki.yml)
+        dialogueModule = new DialogueModule(this);
+        dialogueModule.enable();
+        getServer().getPluginManager().registerEvents(
+                new DialogueListeners(dialogueModule),
+                this
+        );
 
-        // 4. Registries & storage
+        // 4️⃣ Core listeners
+        getServer().getPluginManager().registerEvents(
+                new AdventureModeHandler(this),
+                this
+        );
+
+        // 5️⃣ Registries & storage
         itemRegistry   = new MythicMobsRegistry();
         storageManager = new StorageManager(this);
 
-        // 5. Build GUI
+        // 6️⃣ Build GUI
         guiBuilder = new GuiBuilder(this, getConfig(), itemRegistry, storageManager);
 
-        // 6. Load modules
+        // 7️⃣ Load other util modules
         poisonModule      = new PoisonModule(this);
         recipeBookModule  = new RecipeBookModule(this);
         rewardGroupModule = new RewardGroupModule(this);
@@ -72,14 +81,14 @@ public final class HarambeCore extends JavaPlugin {
         recipeBookModule.enable();
         rewardGroupModule.enable();
 
-        // 7. Setup rewards
+        // 8️⃣ Setup rewards
         PlayerRewardData playerData = new PlayerRewardData(this);
         rewardHandler = new RewardHandler(
                 rewardGroupModule.getManager(),
                 playerData
         );
 
-        // 8. Commands & GUI listener
+        // 9️⃣ Commands & GUI listener
         commandHandler = new CommandHandler(
                 this,
                 guiBuilder,
@@ -87,6 +96,8 @@ public final class HarambeCore extends JavaPlugin {
                 rewardGroupModule.getManager(),
                 itemRegistry
         );
+        commandHandler.registerCommands();
+
         getServer().getPluginManager().registerEvents(
                 new GuiEventListener(guiBuilder, rewardHandler, itemRegistry),
                 this
@@ -100,16 +111,18 @@ public final class HarambeCore extends JavaPlugin {
         // shutdown modules and save GUI data
         recipeBookModule.disable();
         rewardGroupModule.disable();
+        dialogueModule.disable();
         storageManager.onShutdown();
 
         logger.info("§cHarambeCore disabled.");
     }
 
-    /** Call from your reload command */
+    /** Call from your `/harambecore reload` command */
     public void reloadPlugin() {
         reloadConfig();
         guiBuilder.updateConfig(getConfig());
-        commandHandler.registerCommands();
+        commandHandler.registerCommands();  // re-register after reload
+        dialogueModule.enable();
         poisonModule.enable();
         recipeBookModule.enable();
         rewardGroupModule.enable();

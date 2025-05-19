@@ -326,12 +326,4 @@ gui:
         type: STORAGE_SLOT
         slot: [ 10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25 ]
 
-poison:
-  poison-world: "dungeon_build"
-  poison-block: "minecraft:tripwire[attached=false,disarmed=true,east=true,north=false,powered=false,west=true]"
 
-
-recipe-book-commands:
-  world: "anyphone_home"
-  world_nether: "anyphone_faction"
-  world_faction_island: "anyphone_faction"

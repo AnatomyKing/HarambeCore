@@ -12,12 +12,10 @@ public class BossBarTypingSession {
     private final Player player;
     private final List<List<String>> pages;
     private final long tickDelay;
-    private int pageIndex = 0;
-    private int frameIndex = 0;
+    private int pageIndex = 0, frameIndex = 0;
     private BossBar bossBar;
     private BukkitRunnable task;
-    private boolean loopDirection = true;
-    private boolean loopStarted = false;
+    private boolean loopDirection = true, loopStarted = false;
 
     public BossBarTypingSession(Player player, List<List<String>> pages, long tickDelay) {
         this.player = player;
@@ -26,7 +24,7 @@ public class BossBarTypingSession {
     }
 
     public void start() {
-        this.bossBar = BossBar.bossBar(Component.empty(), 1.0f, BossBar.Color.WHITE, BossBar.Overlay.PROGRESS);
+        bossBar = BossBar.bossBar(Component.empty(), 1f, BossBar.Color.WHITE, BossBar.Overlay.PROGRESS);
         bossBar.addViewer(player);
         displayNextPage();
     }
@@ -34,6 +32,7 @@ public class BossBarTypingSession {
     private void displayNextPage() {
         if (pageIndex >= pages.size()) {
             stop();
+            DialogueManager.clear(player); // ✅ Ensure session is removed
             return;
         }
 
@@ -47,17 +46,11 @@ public class BossBarTypingSession {
             public void run() {
                 if (frameIndex < frames.size()) {
                     bossBar.name(Component.text(frames.get(frameIndex++)));
-                    if (frameIndex == frames.size()) {
-                        loopStarted = true;
-                    }
-                } else {
-                    if (frames.size() >= 2) {
-                        frameIndex = frames.size() - (loopDirection ? 2 : 1);
-                        loopDirection = !loopDirection;
-                        bossBar.name(Component.text(frames.get(frameIndex)));
-                    } else if (frames.size() == 1) {
-                        bossBar.name(Component.text(frames.get(0)));
-                    }
+                    if (frameIndex == frames.size()) loopStarted = true;
+                } else if (frames.size() >= 2) {
+                    frameIndex = frames.size() - (loopDirection ? 2 : 1);
+                    loopDirection = !loopDirection;
+                    bossBar.name(Component.text(frames.get(frameIndex)));
                 }
             }
         };

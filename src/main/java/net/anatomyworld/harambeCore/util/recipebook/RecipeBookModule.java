@@ -1,4 +1,3 @@
-/* net.anatomyworld.harambeCore.util.recipebook.RecipeBookModule */
 package net.anatomyworld.harambeCore.util.recipebook;
 
 import net.anatomyworld.harambeCore.config.YamlConfigLoader;
@@ -24,7 +23,8 @@ public final class RecipeBookModule {
         FileConfiguration cfg = YamlConfigLoader.load(plugin, "util/recipe-book.yml");
 
         Map<String,String> worldCmds = new HashMap<>();
-        ConfigurationSection sec = cfg.getConfigurationSection("world-commands");
+        // <— fix here: read the correct section name
+        ConfigurationSection sec = cfg.getConfigurationSection("recipe-book-commands");
         if (sec != null) {
             for (String world : sec.getKeys(false)) {
                 worldCmds.put(world, sec.getString(world));
