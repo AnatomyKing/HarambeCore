@@ -330,13 +330,29 @@ gui:
     title: "huskhomes"
     size: 54
     buttons:
-      home_buttons:
-        slot: [ 18, 19, 20, 21, 22, 23 ] # change/expand as you like
+      create_home_buttons:
+        slot: [ 40 ]
         type: HUSKHOME_BUTTON
-        action: TELEPORT                 # required by your new enum
-        design:                 # template applied to every home
+        action: CREATE
+        cost: 20
+        design:
+          material: GRASS_BLOCK
+          name: "&a&lCreate Home"
+      home_buttons:
+        slot: [ 10, 11, 12, 13, 14, 15, 16 ]
+        type: HUSKHOME_BUTTON
+        action: TELEPORT
+        cost: 1
+        design:
           material: ENDER_PEARL
-          name: "&a%home_name%"          # placeholder replaced at runtime
-          custom_model_data: 0           # remove or change if unused
+          name: "&a%home_name%"
+      delete_home_buttons:
+        slot: [ 19, 20, 21, 22, 23, 24, 25 ]
+        type: HUSKHOME_BUTTON
+        action: DELETE
+        cost: 0
+        design:
+          material: BARRIER
+          name: "&cDelete &a%home_name%"
 
 

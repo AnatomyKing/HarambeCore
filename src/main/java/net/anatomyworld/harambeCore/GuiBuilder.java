@@ -23,7 +23,7 @@ import java.util.*;
 public class GuiBuilder {
 
     public enum SlotType {BUTTON, INPUT_SLOT, CHECK_BUTTON, OUTPUT_SLOT, FILLER, STORAGE_SLOT, HUSKHOME_BUTTON}
-    public enum ActionType {COMMAND, GIVE, REWARD_GET, TELEPORT}
+    public enum ActionType {COMMAND, GIVE, REWARD_GET, TELEPORT, CREATE, DELETE}
     public enum InputActionType {NONE, CONSUME}
 
     /* ---------------- cached data maps ---------------- */
@@ -43,7 +43,10 @@ public class GuiBuilder {
     private final Map<String, Map<Integer, String>> guiCheckItems   = new HashMap<>();
     private final Map<String, Map<Integer, String>> guiRewardGroups = new HashMap<>();
     private final Map<String, List<Integer>> huskHomeSlots = new HashMap<>();
-    private final Map<String, String> huskHomeDesignKey = new HashMap<>();
+    private final Map<String, Map<ActionType, ConfigurationSection>> huskHomeDesigns = new HashMap<>();
+    private final Map<String, List<Integer>> huskHomeCreateSlots  = new HashMap<>();
+    private final Map<String, List<Integer>> huskHomeDeleteSlots  = new HashMap<>();
+
 
     private final JavaPlugin      plugin;
     private final ItemRegistry    itemRegistry;
@@ -83,6 +86,7 @@ public class GuiBuilder {
 
     public void updateConfig(FileConfiguration config) {
         this.config = config;
+
         playerGuis.clear();
         guiSlotTypes.clear();
         buttonLogicCache.clear();
@@ -98,8 +102,13 @@ public class GuiBuilder {
         guiReverseConnections.clear();
         guiCheckItems.clear();
         guiRewardGroups.clear();
+
         huskHomeSlots.clear();
-        this.cachedFillerItem = createFillerItem();
+        huskHomeDesigns.clear();   // <-- add
+        huskHomeCreateSlots.clear(); // ← add
+        huskHomeDeleteSlots.clear(); // ← add
+
+        cachedFillerItem = createFillerItem();
     }
 
     public Set<String> getGuiKeys() {
@@ -228,18 +237,33 @@ public class GuiBuilder {
                         ActionType at = ActionType.valueOf(
                                 bc.getString("action", "TELEPORT").toUpperCase(Locale.ROOT));
 
+                        // remember the design block – only once per action per GUI
+                        huskHomeDesigns
+                                .computeIfAbsent(guiKey, k -> new EnumMap<>(ActionType.class))
+                                .putIfAbsent(at, bc.getConfigurationSection("design"));
+
+                        // paint placeholders & cache cost flags
                         for (int s : slots) {
                             slotTypes.put(s, slotType);
                             gui.setItem(s, cachedFillerItem);
-
-                            /* ↓↓↓  store cost & flags so GuiEventListener can read them */
                             if (ecoCost > 0) slotCosts.put(s, ecoCost);
                             if (costPS)      perStackMap.put(s, true);
                             if (costPay)     payoutMap.put(s, true);
                         }
-                        if (at == ActionType.TELEPORT) {
-                            huskHomeSlots.put(guiKey, slots);
-                            huskHomeDesignKey.put(guiKey, buttonKey);
+
+                        // remember slot lists by action
+                        switch (at) {
+                            case TELEPORT ->
+                                    huskHomeSlots
+                                            .computeIfAbsent(guiKey, k -> new ArrayList<>())
+                                            .addAll(slots);
+                            case CREATE -> huskHomeCreateSlots
+                                    .computeIfAbsent(guiKey, k -> new ArrayList<>())
+                                    .addAll(slots);
+
+                            case DELETE -> huskHomeDeleteSlots
+                                    .computeIfAbsent(guiKey, k -> new ArrayList<>())
+                                    .addAll(slots);
                         }
                     }
 
@@ -406,6 +430,57 @@ public class GuiBuilder {
                 return;   // done
             }
 
+            // ── CREATE a new home ─────────────────────────────────────────
+            if ("huskhomes:create".equals(cmdLine)) {
+                OnlineUser user = HuskHomesAPI.getInstance().adaptUser(player);
+
+                if (HuskHomesAPI.getInstance().getFreeHomeSlots(user) <= 0) {
+                    player.sendMessage("§cYou have no free home slots.");
+                    return;
+                }
+
+                String name = ("homelink" + UUID.randomUUID()
+                        .toString().replace("-", "").substring(0, 5))
+                        .toLowerCase(Locale.ROOT);
+
+                HuskHomesAPI.getInstance()
+                        .createHome(user, name,
+                                HuskHomesAPI.getInstance().adaptPosition(player.getLocation()))
+                        .thenAccept(h -> Bukkit.getScheduler().runTask(plugin, () -> {
+                            player.sendMessage("§aCreated home §e" + name);
+
+                            // refresh the open GUI in-place
+                            Inventory inv = player.getOpenInventory().getTopInventory();
+                            populateHuskHomeButtons(guiKey, inv, player);
+                        }))
+                        .exceptionally(ex -> {
+                            Bukkit.getScheduler().runTask(plugin,
+                                    () -> player.sendMessage("§cCouldn’t create home: "
+                                            + ex.getMessage()));
+                            return null;
+                        });
+                return;
+            }
+
+            // ── DELETE a home ─────────────────────────────────────────────
+            if (cmdLine.startsWith("huskhomes:del:")) {
+                String homeName = cmdLine.substring("huskhomes:del:".length());
+                OnlineUser user = HuskHomesAPI.getInstance().adaptUser(player);
+
+                Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                    HuskHomesAPI.getInstance().deleteHome(user, homeName);
+
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        player.sendMessage("§cDeleted home §e" + homeName);
+
+                        // refresh the open GUI in-place
+                        Inventory inv = player.getOpenInventory().getTopInventory();
+                        populateHuskHomeButtons(guiKey, inv, player);
+                    });
+                });
+                return;
+            }
+
             // Regular console:/player:/ or bare command
             CommandSender sender;
             if (cmdLine.startsWith("console:")) {
@@ -478,45 +553,92 @@ public class GuiBuilder {
     }
 
 
+    private ConfigurationSection getDesign(String guiKey, ActionType action) {
+        return huskHomeDesigns
+                .getOrDefault(guiKey, Collections.emptyMap())
+                .get(action);
+    }
+
     private void populateHuskHomeButtons(String guiKey, Inventory gui, Player player) {
-        List<Integer> slots = huskHomeSlots.get(guiKey);
-        if (slots == null || slots.isEmpty() || player == null) return;
+        var tpSlots  = huskHomeSlots.get(guiKey);       // TELEPORT row (pearls)
+        var delSlots = huskHomeDeleteSlots.get(guiKey); // DELETE   row (barriers)
+        var crtSlots = huskHomeCreateSlots.get(guiKey); // CREATE   row  (lime blocks)
 
-        String btnKey = huskHomeDesignKey.get(guiKey);
-        if (btnKey == null) return;                                   // mis-configured YAML
+        if (player == null) return;
 
-        ConfigurationSection design = config.getConfigurationSection(
-                "gui." + guiKey + ".buttons." + btnKey + ".design");
-        if (design == null) return;                                   // no design section present
+        ConfigurationSection tpDesign  = getDesign(guiKey, ActionType.TELEPORT);
+        ConfigurationSection delDesign = getDesign(guiKey, ActionType.DELETE);
+        ConfigurationSection crtDesign = getDesign(guiKey, ActionType.CREATE);
 
         OnlineUser user = HuskHomesAPI.getInstance().adaptUser(player);
 
         HuskHomesAPI.getInstance().getUserHomes(user).thenAccept(homes ->
-                Bukkit.getScheduler().runTask(plugin, () -> {             // back on main thread
-                    for (int i = 0; i < slots.size(); i++) {
-                        int slotIdx = slots.get(i);
+                Bukkit.getScheduler().runTask(plugin, () -> {
 
-                        // fallback = filler if not enough homes
-                        if (i >= homes.size()) {
-                            gui.setItem(slotIdx, cachedFillerItem);
-                            continue;
+                    /* ───────────────── TELEPORT + DELETE rows ───────────────── */
+                    if (tpSlots != null) {
+                        for (int i = 0; i < tpSlots.size(); i++) {
+                            int tpSlot = tpSlots.get(i);
+                            int delSlot = (delSlots != null && i < delSlots.size()) ? delSlots.get(i) : -1;
+
+                            /* ---- no home for this column → clear both cells ---- */
+                            if (i >= homes.size()) {
+                                gui.setItem(tpSlot, cachedFillerItem);
+                                if (delSlot >= 0) gui.setItem(delSlot, cachedFillerItem);
+
+                                // wipe stale logic
+                                Map<Integer, String> logicMap = buttonLogicCache.get(guiKey);
+                                if (logicMap != null) {
+                                    logicMap.remove(tpSlot);
+                                    if (delSlot >= 0) logicMap.remove(delSlot);
+                                }
+                                continue;
+                            }
+
+                            /* ---- there IS a home → (re)draw both icons -------- */
+                            Home home = homes.get(i);
+
+                            ItemStack tpIcon = createButtonItem(
+                                    tpDesign != null ? tpDesign.getString("material", "ENDER_PEARL") : "ENDER_PEARL",
+                                    (tpDesign != null ? tpDesign.getString("name", "&a%home_name%") : "&a%home_name%")
+                                            .replace("%home_name%", home.getName()),
+                                    tpDesign != null ? tpDesign.getInt("custom_model_data", 0) : 0);
+
+                            gui.setItem(tpSlot, tpIcon);
+                            buttonLogicCache
+                                    .computeIfAbsent(guiKey, k -> new HashMap<>())
+                                    .put(tpSlot, "huskhomes:tp:" + home.getName());
+
+                            if (delSlot >= 0) {
+                                ItemStack delIcon = createButtonItem(
+                                        delDesign != null ? delDesign.getString("material", "BARRIER") : "BARRIER",
+                                        (delDesign != null ? delDesign.getString("name", "&cDelete &a%home_name%") : "&cDelete")
+                                                .replace("%home_name%", home.getName()),
+                                        delDesign != null ? delDesign.getInt("custom_model_data", 0) : 0);
+
+                                gui.setItem(delSlot, delIcon);
+                                buttonLogicCache.get(guiKey).put(delSlot, "huskhomes:del:" + home.getName());
+                            }
                         }
+                    }
 
-                        Home home = homes.get(i);
+                    /* ───────────────────── CREATE row ───────────────────────── */
+                    if (crtSlots != null) {
+                        for (int s : crtSlots) {
+                            ItemStack crtIcon = createButtonItem(
+                                    crtDesign != null ? crtDesign.getString("material", "LIME_CONCRETE") : "LIME_CONCRETE",
+                                    crtDesign != null ? crtDesign.getString("name", "&aCreate Home") : "&aCreate Home",
+                                    crtDesign != null ? crtDesign.getInt("custom_model_data", 0) : 0);
 
-                        ItemStack icon = createButtonItem(
-                                design.getString("material", "ENDER_PEARL"),
-                                design.getString("name", "&a%home_name%")
-                                        .replace("%home_name%", home.getName()),
-                                design.getInt("custom_model_data", 0)
-                        );
-                        gui.setItem(slotIdx, icon);
-
-                        buttonLogicCache.computeIfAbsent(guiKey, k -> new HashMap<>())
-                                .put(slotIdx, "huskhomes:tp:" + home.getName());
+                            gui.setItem(s, crtIcon);
+                            buttonLogicCache
+                                    .computeIfAbsent(guiKey, k -> new HashMap<>())
+                                    .put(s, "huskhomes:create");
+                        }
                     }
                 })
         );
     }
+
 
 }
