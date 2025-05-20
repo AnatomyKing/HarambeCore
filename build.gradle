@@ -1,7 +1,7 @@
 plugins {
     id 'java'
     id 'io.papermc.paperweight.userdev' version '2.0.0-beta.16'
-    id "xyz.jpenilla.run-paper" version "2.3.1"
+    id 'xyz.jpenilla.run-paper' version '2.3.1'
 }
 
 group = 'net.anatomyworld'
@@ -9,27 +9,29 @@ version = '1.0-SNAPSHOT'
 
 repositories {
     mavenCentral()
-    maven {
-        name = "papermc-repo"
-        url = "https://repo.papermc.io/repository/maven-public/"
-    }
-    maven {
-        name = "sonatype"
-        url = "https://oss.sonatype.org/content/groups/public/"
-    }
-    flatDir {
-        dirs 'libs'
-    }
+    maven { url 'https://repo.papermc.io/repository/maven-public/' }
+    maven { url 'https://oss.sonatype.org/content/groups/public/' }
+    maven { url 'https://repo.william278.net/releases' }
+    flatDir { dirs 'libs' }
 }
 
 dependencies {
-    paperweight.paperDevBundle("1.21.3-R0.1-SNAPSHOT")
+    paperweight.paperDevBundle('1.21.3-R0.1-SNAPSHOT')
+
+    // Force specific Adventure API version
+    compileOnly 'net.kyori:adventure-api:4.17.0'
+    compileOnly 'net.william278.huskhomes:huskhomes-bukkit:4.9.5'
+
     compileOnly name: 'Vault'
     compileOnly name: 'MythicMobsPremium-5.9.0-SNAPSHOT'
-    compileOnly name: 'HuskHomes-Paper-4.9.5'
     compileOnly name: 'ProtocolLib'
 }
 
+configurations.configureEach {
+    resolutionStrategy {
+        force 'net.kyori:adventure-api:4.17.0'
+    }
+}
 
 java {
     toolchain.languageVersion.set(JavaLanguageVersion.of(21))
@@ -44,16 +46,13 @@ processResources {
     def props = [version: version]
     inputs.properties props
     filteringCharset = 'UTF-8'
-    filesMatching('plugin.yml') {
-        expand props
-    }
+    filesMatching('plugin.yml') { expand props }
 }
 
 jar {
-    archiveBaseName.set("HarambeCore")
+    archiveBaseName.set('HarambeCore')
 }
 
-// Add run server task
-tasks.named("runServer") {
-    minecraftVersion("1.21.3")
+tasks.named('runServer') {
+    minecraftVersion('1.21.3')
 }

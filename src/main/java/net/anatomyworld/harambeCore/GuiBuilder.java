@@ -225,19 +225,24 @@ public class GuiBuilder {
                     }
 
                     case HUSKHOME_BUTTON -> {
-                        // pick up the YAML action (default = TELEPORT)
                         ActionType at = ActionType.valueOf(
                                 bc.getString("action", "TELEPORT").toUpperCase(Locale.ROOT));
 
                         for (int s : slots) {
                             slotTypes.put(s, slotType);
-                            gui.setItem(s, cachedFillerItem);          // placeholder
+                            gui.setItem(s, cachedFillerItem);
+
+                            /* ↓↓↓  store cost & flags so GuiEventListener can read them */
+                            if (ecoCost > 0) slotCosts.put(s, ecoCost);
+                            if (costPS)      perStackMap.put(s, true);
+                            if (costPay)     payoutMap.put(s, true);
                         }
-                        if (at == ActionType.TELEPORT) {               // remember for later painting
+                        if (at == ActionType.TELEPORT) {
                             huskHomeSlots.put(guiKey, slots);
-                            huskHomeDesignKey.put(guiKey, buttonKey);  // ← save which YAML node has design
+                            huskHomeDesignKey.put(guiKey, buttonKey);
                         }
                     }
+
 
                     /* ------------- BUTTON / CHECK_BUTTON -------- */
                     case BUTTON, CHECK_BUTTON -> {
