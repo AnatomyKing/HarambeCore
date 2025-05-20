@@ -1,4 +1,3 @@
-/* net.anatomyworld.harambeCore.util.poison.PoisonModule */
 package net.anatomyworld.harambeCore.util.poison;
 
 import net.anatomyworld.harambeCore.config.YamlConfigLoader;
@@ -9,9 +8,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class PoisonModule {
 
-    private final JavaPlugin plugin;          // <-- now JavaPlugin
+    private final JavaPlugin plugin;
 
-    public PoisonModule(JavaPlugin plugin) {  // <-- constructor updated
+    public PoisonModule(JavaPlugin plugin) {
         this.plugin = plugin;
     }
 
@@ -19,8 +18,8 @@ public final class PoisonModule {
     public void enable() {
         FileConfiguration cfg = YamlConfigLoader.load(plugin, "util/poison-block.yml");
 
-        String worldName   = cfg.getString("poison-world", "world");
-        String blockDataS  = cfg.getString("poison-block");
+        String worldName  = cfg.getString("poison-world", "world");
+        String blockDataS = cfg.getString("poison-block");
 
         plugin.getLogger().info("[Poison] world  = " + worldName);
         plugin.getLogger().info("[Poison] block  = " + blockDataS);
@@ -32,8 +31,10 @@ public final class PoisonModule {
 
         try {
             BlockData bd = Bukkit.createBlockData(blockDataS);
-            Bukkit.getPluginManager()
-                    .registerEvents(new PoisonEffect(worldName, bd), plugin);
+            Bukkit.getPluginManager().registerEvents(
+                    new PoisonEffect(plugin, worldName, bd),
+                    plugin
+            );
         } catch (IllegalArgumentException ex) {
             plugin.getLogger().warning("[Poison] invalid block data string: " + blockDataS);
         }
