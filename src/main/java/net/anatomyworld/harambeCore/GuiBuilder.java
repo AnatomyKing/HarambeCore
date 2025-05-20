@@ -4,6 +4,9 @@ import net.anatomyworld.harambeCore.storage.StorageManager;
 import net.anatomyworld.harambeCore.item.ItemRegistry;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.william278.huskhomes.api.HuskHomesAPI;
+import net.william278.huskhomes.position.Home;
+import net.william278.huskhomes.user.OnlineUser;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.command.CommandSender;
@@ -19,8 +22,8 @@ import java.util.*;
 
 public class GuiBuilder {
 
-    public enum SlotType {BUTTON, INPUT_SLOT, CHECK_BUTTON, OUTPUT_SLOT, FILLER, STORAGE_SLOT}
-    public enum ActionType {COMMAND, GIVE, REWARD_GET}
+    public enum SlotType {BUTTON, INPUT_SLOT, CHECK_BUTTON, OUTPUT_SLOT, FILLER, STORAGE_SLOT, HUSKHOME_BUTTON}
+    public enum ActionType {COMMAND, GIVE, REWARD_GET, TELEPORT}
     public enum InputActionType {NONE, CONSUME}
 
     /* ---------------- cached data maps ---------------- */
@@ -39,16 +42,23 @@ public class GuiBuilder {
     private final Map<String, Map<Integer, Integer>>         guiReverseConnections = new HashMap<>();
     private final Map<String, Map<Integer, String>> guiCheckItems   = new HashMap<>();
     private final Map<String, Map<Integer, String>> guiRewardGroups = new HashMap<>();
+    private final Map<String, List<Integer>> huskHomeSlots = new HashMap<>();
+    private final Map<String, String> huskHomeDesignKey = new HashMap<>();
 
-    private final ItemRegistry itemRegistry;
-    private FileConfiguration  config;
-    private ItemStack          cachedFillerItem;
-    private final StorageManager storageManager;
+    private final JavaPlugin      plugin;
+    private final ItemRegistry    itemRegistry;
+    private FileConfiguration     config;
+    private ItemStack             cachedFillerItem;
+    private final StorageManager  storageManager;
 
 
-    public GuiBuilder(JavaPlugin plugin, FileConfiguration config, ItemRegistry itemRegistry, StorageManager storageManager) {
-        this.config          = config;
-        this.itemRegistry    = itemRegistry;
+    public GuiBuilder(JavaPlugin plugin,
+                      FileConfiguration config,
+                      ItemRegistry itemRegistry,
+                      StorageManager storageManager) {
+        this.plugin        = plugin;          // ← keep a reference
+        this.config        = config;
+        this.itemRegistry  = itemRegistry;
         this.storageManager = storageManager;
         this.cachedFillerItem = createFillerItem();
     }
@@ -88,6 +98,7 @@ public class GuiBuilder {
         guiReverseConnections.clear();
         guiCheckItems.clear();
         guiRewardGroups.clear();
+        huskHomeSlots.clear();
         this.cachedFillerItem = createFillerItem();
     }
 
@@ -213,6 +224,21 @@ public class GuiBuilder {
                         }
                     }
 
+                    case HUSKHOME_BUTTON -> {
+                        // pick up the YAML action (default = TELEPORT)
+                        ActionType at = ActionType.valueOf(
+                                bc.getString("action", "TELEPORT").toUpperCase(Locale.ROOT));
+
+                        for (int s : slots) {
+                            slotTypes.put(s, slotType);
+                            gui.setItem(s, cachedFillerItem);          // placeholder
+                        }
+                        if (at == ActionType.TELEPORT) {               // remember for later painting
+                            huskHomeSlots.put(guiKey, slots);
+                            huskHomeDesignKey.put(guiKey, buttonKey);  // ← save which YAML node has design
+                        }
+                    }
+
                     /* ------------- BUTTON / CHECK_BUTTON -------- */
                     case BUTTON, CHECK_BUTTON -> {
                         ActionType at    = ActionType.valueOf(bc.getString("action", "COMMAND").toUpperCase(Locale.ROOT));
@@ -305,6 +331,10 @@ public class GuiBuilder {
         guiReverseConnections.put(guiKey, reverse);
         guiCheckItems.put(guiKey, checkItems);
         guiRewardGroups.put(guiKey, rewardGroups);
+        if (huskHomeSlots.containsKey(guiKey)) {
+            populateHuskHomeButtons(guiKey, gui, Bukkit.getPlayer(playerId));
+
+        }
         return gui;
     }
 
@@ -352,31 +382,67 @@ public class GuiBuilder {
         Map<Integer, String>  outputs = guiOutputItems.getOrDefault(guiKey, Collections.emptyMap());
         Map<Integer, Integer> pays    = guiPayoutAmounts.getOrDefault(guiKey, Collections.emptyMap());
 
+        /* ── 1.  COMMAND / TELEPORT logic ───────────────────────── */
         if (logics.containsKey(slot)) {
             String cmdLine = logics.get(slot).replace("%player%", player.getName());
+
+            // HuskHomes teleport shortcut
+            if (cmdLine.startsWith("huskhomes:tp:")) {
+                String     homeName = cmdLine.substring("huskhomes:tp:".length());
+                OnlineUser user     = HuskHomesAPI.getInstance().adaptUser(player);
+
+                HuskHomesAPI.getInstance().getHome(user, homeName).thenAccept(opt ->
+                        opt.ifPresent(home -> HuskHomesAPI.getInstance().teleportBuilder()
+                                .teleporter(user)
+                                .target(home)
+                                .buildAndComplete(true)   // instant teleport
+                        )
+                );
+                return;   // done
+            }
+
+            // Regular console:/player:/ or bare command
             CommandSender sender;
-            if (cmdLine.startsWith("console:")) { sender = Bukkit.getConsoleSender(); cmdLine = cmdLine.substring(8); }
-            else if (cmdLine.startsWith("player:")) { sender = player; cmdLine = cmdLine.substring(7); }
-            else sender = player;
+            if (cmdLine.startsWith("console:")) {
+                sender  = Bukkit.getConsoleSender();
+                cmdLine = cmdLine.substring(8);
+            } else if (cmdLine.startsWith("player:")) {
+                sender  = player;
+                cmdLine = cmdLine.substring(7);
+            } else {
+                sender = player;
+            }
             if (cmdLine.startsWith("/")) cmdLine = cmdLine.substring(1);
             Bukkit.dispatchCommand(sender, cmdLine.trim());
-        } else if (outputs.containsKey(slot)) {
-            String raw   = outputs.get(slot);
-            int amount   = pays.getOrDefault(slot, 1);
+            return;
+        }
+
+        /* ── 2.  GIVE-item logic (MYTHIC or vanilla) ────────────── */
+        if (outputs.containsKey(slot)) {
+            String raw    = outputs.get(slot);
+            int    amount = pays.getOrDefault(slot, 1);
+
             if (raw.toUpperCase(Locale.ROOT).startsWith("MYTHIC:")) {
-                String id = raw.substring("MYTHIC:".length());
-                ItemStack myth = itemRegistry.getItem(id);
-                if (myth != null) {
-                    myth.setAmount(amount);
-                    player.getInventory().addItem(myth);
-                } else player.sendMessage("§cMythic item '" + id + "' not found.");
+                String id   = raw.substring("MYTHIC:".length());
+                ItemStack it = itemRegistry.getItem(id);
+                if (it != null) {
+                    it.setAmount(amount);
+                    player.getInventory().addItem(it);
+                } else {
+                    player.sendMessage("§cMythic item '" + id + "' not found.");
+                }
             } else {
                 Material mat = Material.matchMaterial(raw);
-                if (mat != null) player.getInventory().addItem(new ItemStack(mat, amount));
-                else player.sendMessage("§cInvalid output_item: " + raw);
+                if (mat != null) {
+                    player.getInventory().addItem(new ItemStack(mat, amount));
+                } else {
+                    player.sendMessage("§cInvalid output_item: " + raw);
+                }
             }
         }
     }
+
+
 
     public void handleGuiClose(Player player, Inventory inv) {
         String guiKey = getGuiKeyByInventory(player, inv);
@@ -405,4 +471,47 @@ public class GuiBuilder {
                 .filter(e -> e.getValue().equals(inv))
                 .map(Map.Entry::getKey).findFirst().orElse(null);
     }
+
+
+    private void populateHuskHomeButtons(String guiKey, Inventory gui, Player player) {
+        List<Integer> slots = huskHomeSlots.get(guiKey);
+        if (slots == null || slots.isEmpty() || player == null) return;
+
+        String btnKey = huskHomeDesignKey.get(guiKey);
+        if (btnKey == null) return;                                   // mis-configured YAML
+
+        ConfigurationSection design = config.getConfigurationSection(
+                "gui." + guiKey + ".buttons." + btnKey + ".design");
+        if (design == null) return;                                   // no design section present
+
+        OnlineUser user = HuskHomesAPI.getInstance().adaptUser(player);
+
+        HuskHomesAPI.getInstance().getUserHomes(user).thenAccept(homes ->
+                Bukkit.getScheduler().runTask(plugin, () -> {             // back on main thread
+                    for (int i = 0; i < slots.size(); i++) {
+                        int slotIdx = slots.get(i);
+
+                        // fallback = filler if not enough homes
+                        if (i >= homes.size()) {
+                            gui.setItem(slotIdx, cachedFillerItem);
+                            continue;
+                        }
+
+                        Home home = homes.get(i);
+
+                        ItemStack icon = createButtonItem(
+                                design.getString("material", "ENDER_PEARL"),
+                                design.getString("name", "&a%home_name%")
+                                        .replace("%home_name%", home.getName()),
+                                design.getInt("custom_model_data", 0)
+                        );
+                        gui.setItem(slotIdx, icon);
+
+                        buttonLogicCache.computeIfAbsent(guiKey, k -> new HashMap<>())
+                                .put(slotIdx, "huskhomes:tp:" + home.getName());
+                    }
+                })
+        );
+    }
+
 }

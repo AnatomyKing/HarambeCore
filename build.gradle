@@ -25,8 +25,9 @@ repositories {
 dependencies {
     paperweight.paperDevBundle("1.21.3-R0.1-SNAPSHOT")
     compileOnly name: 'Vault'
-    compileOnly name: 'ProtocolLib'
     compileOnly name: 'MythicMobsPremium-5.9.0-SNAPSHOT'
+    compileOnly name: 'HuskHomes-Paper-4.9.5'
+    compileOnly name: 'ProtocolLib'
 }
 
 

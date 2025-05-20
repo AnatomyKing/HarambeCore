@@ -4,7 +4,7 @@ main: net.anatomyworld.harambeCore.HarambeCore
 api-version: '1.21'
 description: A plugin for managing custom GUIs, reward groups, and item systems via MythicMobs.
 
-depend: [MythicMobs, Vault]
+depend: [MythicMobs, Vault, HuskHomes]
 
 commands:
   harambe:

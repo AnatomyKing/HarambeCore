@@ -106,10 +106,11 @@ public class GuiEventListener implements Listener {
         switch (st) {
 
             /* ---------------- BUTTON ---------------- */
-            case BUTTON -> {
+            case BUTTON, HUSKHOME_BUTTON -> {           //  ⬅ added HUSKHOME_BUTTON
                 double fee   = costs.getOrDefault(clicked, 0.0);
                 boolean give = costPay.getOrDefault(clicked, false);
                 e.setCancelled(true);
+
                 if (fee > 0) {
                     if (give) EconomyHandler.depositBalance(p, fee);
                     else if (!EconomyHandler.withdrawBalance(p, fee)) {
