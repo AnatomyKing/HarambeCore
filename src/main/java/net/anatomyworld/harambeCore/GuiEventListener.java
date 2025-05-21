@@ -13,6 +13,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.*;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import java.util.UUID;
 
 import java.util.*;
 
@@ -102,6 +103,7 @@ public class GuiEventListener implements Listener {
         Map<Integer, Integer>        reverse    = guiBuilder.getReverseSlotConnections(guiKey);
         Map<Integer, String>         groupMap   = guiBuilder.getRewardGroups(guiKey);
         Map<Integer, String>         checkItems = guiBuilder.getCheckItems(guiKey);
+        Map<Integer, Boolean>        copyMap    = guiBuilder.getCopyItems(guiKey);
 
         switch (st) {
 
@@ -184,15 +186,13 @@ public class GuiEventListener implements Listener {
                 ItemStack cur = e.getCursor();
                 if (cur.getType().isAir()) return;
 
-                // Mythic/item check
+                /* ---------- 1. Mythic / material whitelist ---------- */
                 if (accepted.containsKey(clicked)) {
                     String expected = accepted.get(clicked);
                     if (expected.startsWith("MYTHIC:")) {
                         String id = expected.substring("MYTHIC:".length());
                         if (!rewardHandler.mythic().isMythicItem(cur) ||
-                                !id.equalsIgnoreCase(
-                                        rewardHandler.mythic().getMythicTypeFromItem(cur)
-                                )) {
+                                !id.equalsIgnoreCase(rewardHandler.mythic().getMythicTypeFromItem(cur))) {
                             e.setCancelled(true);
                             p.sendMessage("§cOnly Mythic item: " + id);
                             return;
@@ -207,31 +207,36 @@ public class GuiEventListener implements Listener {
                     }
                 }
 
-                // Group filter
+                /* ---------- 2. Reward-group filter (skip if copy_item:true) ---------- */
                 if (groupMap.containsKey(clicked)) {
-                    String expectedGroup = groupMap.get(clicked);
-                    String key = resolveKey(cur);
-                    var entry = rewardHandler.groupMgr().getEntryForItem(key);
-                    if (entry == null ||
-                            !entry.groupName().equals(expectedGroup)) {
-                        e.setCancelled(true);
-                        p.sendMessage("§cThis item not allowed here.");
-                        return;
+                    // check-button this input belongs to (if any)
+                    Integer chkSlot = reverse.get(clicked);
+                    boolean copyFlag = chkSlot != null && copyMap.getOrDefault(chkSlot, false);
+
+                    if (!copyFlag) {                   // enforce group only when NOT copying
+                        String expectedGroup = groupMap.get(clicked);
+                        String key           = resolveKey(cur);
+                        var entry            = rewardHandler.groupMgr().getEntryForItem(key);
+
+                        if (entry == null || !entry.groupName().equals(expectedGroup)) {
+                            e.setCancelled(true);
+                            p.sendMessage("§cThis item not allowed here.");
+                            return;
+                        }
                     }
                 }
 
-                // Exact amount
-                if (amounts.containsKey(clicked) &&
-                        cur.getAmount() != amounts.get(clicked)) {
+                /* ---------- 3. Exact-amount check ---------- */
+                if (amounts.containsKey(clicked) && cur.getAmount() != amounts.get(clicked)) {
                     e.setCancelled(true);
                     p.sendMessage("§cYou must place exactly " + amounts.get(clicked));
                     return;
                 }
 
-                InputActionType ia      = actions.getOrDefault(clicked, InputActionType.NONE);
-                boolean         defer   = reverse.containsKey(clicked);
+                /* ---------- 4. Cost + queue logic ---------- */
+                InputActionType ia = actions.getOrDefault(clicked, InputActionType.NONE);
+                boolean defer      = reverse.containsKey(clicked);   // consumed later by CHECK_BUTTON
 
-                // Consume immediately
                 if (ia == InputActionType.CONSUME && !defer) {
                     double unit = costs.getOrDefault(clicked, 0.0);
                     int mul     = perStack.getOrDefault(clicked, false) ? cur.getAmount() : 1;
@@ -269,19 +274,25 @@ public class GuiEventListener implements Listener {
                     p.sendMessage("§cNo reward group configured."); return;
                 }
 
+                /* NEW: allow any item if copy_item:true */
+                boolean copyFlag = copyMap.getOrDefault(clicked, false);
+
                 boolean valid = true;
-                for (int s : targets) {
-                    ItemStack it = e.getInventory().getItem(s);
-                    if (it == null) { valid = false; break; }
-                    var entry = rewardHandler.groupMgr().getEntryForItem(resolveKey(it));
-                    if (entry == null || !entry.groupName().equals(group)) {
-                        valid = false; break;
+                if (!copyFlag) {                       // normal validation path
+                    for (int s : targets) {
+                        ItemStack it = e.getInventory().getItem(s);
+                        if (it == null) { valid = false; break; }
+                        var entry = rewardHandler.groupMgr().getEntryForItem(resolveKey(it));
+                        if (entry == null || !entry.groupName().equals(group)) {
+                            valid = false; break;
+                        }
                     }
                 }
                 if (!valid) {
                     p.sendMessage("§cInvalid item(s) or wrong group."); return;
                 }
 
+                /* -------- fee handling -------- */
                 double fee = costs.getOrDefault(clicked, 0.0);
                 if (fee > 0) {
                     if (costPay.getOrDefault(clicked, false))
@@ -291,9 +302,12 @@ public class GuiEventListener implements Listener {
                     }
                 }
 
+                /* -------- queue / copy / consume -------- */
                 for (int s : targets) {
                     ItemStack it = e.getInventory().getItem(s);
                     if (it != null) rewardHandler.queueReward(p.getUniqueId(), it);
+                    if (copyFlag && it != null)
+                        rewardHandler.playerData().addStackReward(p.getUniqueId(), group, it);
 
                     if (actions.getOrDefault(s, InputActionType.NONE) == InputActionType.CONSUME) {
                         int rem;
@@ -311,13 +325,8 @@ public class GuiEventListener implements Listener {
                 }
 
                 guiBuilder.handleButtonClick(p, guiKey, clicked);
-                paintRetrieval(
-                        e.getInventory(),
-                        slotTypes,
-                        groupMap,
-                        group,
-                        rewardHandler.playerData().getAllRewards(p.getUniqueId(), group)
-                );
+                paintRetrieval(e.getInventory(), slotTypes, groupMap, group,
+                        rewardHandler.playerData().getAllRewards(p.getUniqueId(), group));
             }
 
             /* ---------------- OUTPUT_SLOT ---------- */
@@ -326,7 +335,19 @@ public class GuiEventListener implements Listener {
                 String group = groupMap.get(clicked);
                 if (group == null) { p.sendMessage("§cNo group."); return; }
 
-                // ⬇️  ➜ RE-ADD THIS LINE  ⬇️
+                List<ItemStack> stackRewards = rewardHandler.playerData()
+                        .getStackRewards(p.getUniqueId(), group);
+                if (!stackRewards.isEmpty()) {
+                    ItemStack give = stackRewards.get(0).clone();
+                    p.getInventory().addItem(give);
+                    rewardHandler.playerData().popFirstStackReward(p.getUniqueId(), group);
+
+                    paintRetrieval(e.getInventory(), slotTypes, groupMap, group,
+                            rewardHandler.playerData().getAllRewards(p.getUniqueId(), group));
+                    return;          // stop – no string-reward this click
+                }
+
+
                 List<Integer> outs = outputSlotsForGroup(slotTypes, groupMap, group);
 
                 Map<String,Integer> rewardMap =
@@ -377,25 +398,45 @@ public class GuiEventListener implements Listener {
     }
 
     private void paintRetrieval(Inventory inv,
-                                Map<Integer, SlotType> slotTypes,
-                                Map<Integer, String>   groupMap,
-                                String                 group,
-                                Map<String,Integer>    rewards) {
+                                Map<Integer, GuiBuilder.SlotType> slotTypes,
+                                Map<Integer, String> groupMap,
+                                String group,
+                                Map<String, Integer> rewards) {
 
         List<Integer> outs = outputSlotsForGroup(slotTypes, groupMap, group);
-        List<String>  ids  = new ArrayList<>(rewards.keySet());
 
-        for (int i = 0; i < outs.size(); i++) {
-            int slot = outs.get(i);
-            if (i >= ids.size()) { inv.setItem(slot, null); continue; }
+        UUID playerId = inv.getViewers().isEmpty()
+                ? new UUID(0, 0)
+                : inv.getViewers().get(0).getUniqueId(); // No cast needed
 
-            String id  = ids.get(i);
-            int qty    = rewards.get(id);
-            ItemStack it = itemRegistry.getItem(id);
-            if (it == null) { inv.setItem(slot, null); continue; }
+        // 1 – stack-queue (real item submissions)
+        List<ItemStack> stackRewards = rewardHandler.playerData().getStackRewards(playerId, group);
 
-            it.setAmount(Math.min(qty, it.getMaxStackSize()));
-            inv.setItem(slot, it);
+        int pos = 0;
+        for (; pos < outs.size() && pos < stackRewards.size(); pos++) {
+            inv.setItem(outs.get(pos), stackRewards.get(pos));
+        }
+
+        // 2 – id→item reward queue
+        List<String> ids = new ArrayList<>(rewards.keySet());
+        for (int i = 0; pos < outs.size(); pos++, i++) {
+            int slot = outs.get(pos);
+            if (i >= ids.size()) {
+                inv.setItem(slot, null);
+                continue;
+            }
+
+            String id = ids.get(i);
+            int qty = rewards.get(id);
+            ItemStack proto = itemRegistry.getItem(id);
+            if (proto == null) {
+                inv.setItem(slot, null);
+                continue;
+            }
+
+            ItemStack stack = proto.clone();
+            stack.setAmount(Math.min(qty, stack.getMaxStackSize()));
+            inv.setItem(slot, stack);
         }
     }
 

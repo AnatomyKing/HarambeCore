@@ -48,6 +48,8 @@ public class GuiBuilder {
     private final Map<String, List<Integer>> huskHomeCreateSlots  = new HashMap<>();
     private final Map<String, List<Integer>> huskHomeDeleteSlots  = new HashMap<>();
     private final Map<String, Map<Integer, Boolean>> guiScaleWithOutput = new HashMap<>();
+    private final Map<String, Map<Integer, Boolean>> guiCopyItems = new HashMap<>();
+
 
 
     private final JavaPlugin      plugin;
@@ -83,7 +85,8 @@ public class GuiBuilder {
     public Map<Integer, Integer>         getReverseSlotConnections(String key)     { return guiReverseConnections.getOrDefault(key, Collections.emptyMap()); }
     public Map<Integer, String>          getCheckItems(String key)                 { return guiCheckItems.getOrDefault(key, Collections.emptyMap()); }
     public Map<Integer, String>          getRewardGroups(String key)               { return guiRewardGroups.getOrDefault(key, Collections.emptyMap()); }
-    public Map<Integer, Boolean> getScaleWithOutput(String key)                    { return guiScaleWithOutput.getOrDefault(key, Collections.emptyMap());}
+    public Map<Integer, Boolean> getScaleWithOutput(String key)                    { return guiScaleWithOutput.getOrDefault(key, Collections.emptyMap()); }
+    public Map<Integer, Boolean> getCopyItems(String key)                          { return guiCopyItems.getOrDefault(key, Collections.emptyMap()); }
 
     /* ---------------- cache reset on config reload ---------------- */
 
@@ -106,6 +109,7 @@ public class GuiBuilder {
         guiReverseConnections.clear();
         guiCheckItems.clear();
         guiRewardGroups.clear();
+        guiCopyItems.clear();
 
         huskHomeSlots.clear();
         huskHomeDesigns.clear();   // <-- add
@@ -154,7 +158,8 @@ public class GuiBuilder {
         Map<Integer, List<Integer>>   slotConnections = new HashMap<>();
         Map<Integer, String>          checkItems      = new HashMap<>();
         Map<Integer, String>          rewardGroups    = new HashMap<>();
-        Map<Integer, Boolean>         scaleMap       = new HashMap<>();
+        Map<Integer, Boolean>         scaleMap        = new HashMap<>();
+        Map<Integer, Boolean>         copyMap         = new HashMap<>();
 
         ConfigurationSection buttonsSection = guiSection.getConfigurationSection("buttons");
         if (buttonsSection != null) {
@@ -275,38 +280,45 @@ public class GuiBuilder {
                     }
 
 
-                    /* ------------- BUTTON / CHECK_BUTTON -------- */
                     case BUTTON, CHECK_BUTTON -> {
                         ActionType at    = ActionType.valueOf(bc.getString("action", "COMMAND").toUpperCase(Locale.ROOT));
                         String     logic = bc.getString("logic");
 
+                        /* ---------- optional output_item parsing (for ActionType.GIVE) ---------- */
                         String outItem = null;
                         int    payAmt  = 1;
                         Object oi      = bc.get("output_item");
                         if (oi instanceof ConfigurationSection oc) {
                             String myth = oc.getString("mythic");
-                            String mat = oc.getString("material");
+                            String mat  = oc.getString("material");
 
                             if (myth != null && !myth.isEmpty()) {
                                 outItem = "MYTHIC:" + myth;
                             } else if (mat != null && !mat.isEmpty()) {
                                 outItem = mat.toUpperCase(Locale.ROOT);
                             }
-
                             payAmt = oc.getInt("amount", 1);
                         } else if (oi instanceof String s) {
                             outItem = s.toUpperCase(Locale.ROOT);
                             payAmt  = bc.getInt("payout_amount", 1);
                         }
 
+                        /* ---------- slot-connection & reward-group ---------- */
                         String connectKey = bc.getString("slot_connection");
                         String rGroup     = extractRewardGroup(bc);
+
                         List<Integer> connected = new ArrayList<>();
                         if (connectKey != null && buttonsSection.isConfigurationSection(connectKey))
                             connected = Objects.requireNonNull(
                                     buttonsSection.getConfigurationSection(connectKey)).getIntegerList("slot");
 
-                        /* ---- button item design ---- */
+                        /* ---------- NEW: copy_item flag (only relevant for CHECK_BUTTON) ---------- */
+                        boolean copyFlag = false;
+                        if (slotType == SlotType.CHECK_BUTTON && bc.isConfigurationSection("check_item")) {
+                            copyFlag = Objects.requireNonNull(bc.getConfigurationSection("check_item")).getBoolean("copy_item", false);
+                        }
+
+                        /* ---------- button item design ---------- */
                         ConfigurationSection d = bc.getConfigurationSection("design");
                         ItemStack btnItem;
                         if (d != null && d.contains("mythic")) {
@@ -314,25 +326,32 @@ public class GuiBuilder {
                             if (btnItem == null) btnItem = new ItemStack(Material.BARRIER);
                         } else {
                             String matName  = d != null ? d.getString("material", "STONE") : "STONE";
-                            String itemName = d != null ? d.getString("name", "&fButton") : "&fButton";
-                            int    cmd      = d != null ? d.getInt("custom_model_data", 0) : 0;
+                            String itemName = d != null ? d.getString("name", "&fButton")   : "&fButton";
+                            int    cmd      = d != null ? d.getInt("custom_model_data", 0)  : 0;
                             btnItem = createButtonItem(matName, itemName, cmd);
                         }
 
+                        /* ---------- apply to every slot in this logical button ---------- */
                         for (int s : slots) {
                             gui.setItem(s, btnItem);
                             slotTypes.put(s, slotType);
-                            if (ecoCost > 0) slotCosts.put(s, ecoCost);
-                            if (costPS)      perStackMap.put(s, true);
-                            if (costPay)     payoutMap.put(s, true);
-                            if (scaleOut)   scaleMap.put(s, true);
+
+                            if (ecoCost  > 0) slotCosts.put(s, ecoCost);
+                            if (costPS)       perStackMap.put(s, true);
+                            if (costPay)      payoutMap.put(s, true);
+                            if (scaleOut)     scaleMap.put(s, true);
+
+                            if (slotType == SlotType.CHECK_BUTTON && copyFlag) copyMap.put(s, true);
+
                             if (at == ActionType.COMMAND && logic != null) buttonLogics.put(s, logic);
+
                             if (at == ActionType.GIVE && outItem != null) {
                                 outputItems.put(s, outItem);
                                 payoutAmounts.put(s, payAmt);
                             }
-                            if (rGroup != null) checkItems.put(s, rGroup);
-                            if (!connected.isEmpty()) slotConnections.put(s, connected);
+
+                            if (rGroup != null)          checkItems.put(s, rGroup);
+                            if (!connected.isEmpty())    slotConnections.put(s, connected);
                         }
                     }
 
@@ -369,6 +388,7 @@ public class GuiBuilder {
         guiCheckItems.put(guiKey, checkItems);
         guiRewardGroups.put(guiKey, rewardGroups);
         guiScaleWithOutput.put(guiKey, scaleMap);
+        guiCopyItems.put(guiKey, copyMap);
         if (huskHomeSlots.containsKey(guiKey)) {
             populateHuskHomeButtons(guiKey, gui, Bukkit.getPlayer(playerId));
 

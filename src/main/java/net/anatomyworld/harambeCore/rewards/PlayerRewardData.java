@@ -4,13 +4,12 @@ package net.anatomyworld.harambeCore.rewards;
 import net.anatomyworld.harambeCore.config.YamlConfigLoader;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 
 public class PlayerRewardData {
@@ -80,6 +79,42 @@ public class PlayerRewardData {
     public void removeGroup(UUID id, String group) {
         FileConfiguration yml = loadConfig(id);
         yml.set("rewards." + group, null);
+        saveConfig(id, yml);
+    }
+
+    /** Append a clone of the ItemStack to the player’s personal queue. */
+    public void addStackReward(UUID id, String group, ItemStack stack) {
+        if (stack == null) return;
+        FileConfiguration yml = loadConfig(id);
+        String path = "rewards." + group + ".stack_queue";
+
+        @SuppressWarnings("unchecked")
+        List<ItemStack> list = (List<ItemStack>) yml.getList(path);
+        if (list == null) list = new ArrayList<>();
+        list.add(stack.clone());
+
+        yml.set(path, list);
+        saveConfig(id, yml);
+    }
+
+    /** Return a *copy* of the queued stacks (never null). */
+    @SuppressWarnings("unchecked")
+    public List<ItemStack> getStackRewards(UUID id, String group) {
+        FileConfiguration yml = loadConfig(id);
+        List<ItemStack> list = (List<ItemStack>) yml.getList("rewards." + group + ".stack_queue");
+        return list != null ? new ArrayList<>(list) : new ArrayList<>();
+    }
+
+    /** Pop (and discard) the first queued ItemStack. */
+    @SuppressWarnings("unchecked")
+    public void popFirstStackReward(UUID id, String group) {
+        String path = "rewards." + group + ".stack_queue";
+        FileConfiguration yml = loadConfig(id);
+        List<ItemStack> list = (List<ItemStack>) yml.getList(path);
+        if (list == null || list.isEmpty()) return;
+
+        list.remove(0);
+        yml.set(path, list);
         saveConfig(id, yml);
     }
 
