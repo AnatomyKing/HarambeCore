@@ -180,7 +180,7 @@ gui:
         type: BUTTON
         action: GIVE
         output_item:
-          material: DIAMOND
+          mythic: banana_pearl
           amount: 1
         cost: 1
         design:
@@ -193,9 +193,12 @@ gui:
         type: BUTTON
         action: GIVE
         output_item:
-          material: DIAMOND
+          mythic: banana_pearl
           amount: 5
-        cost: 5
+        cost:
+          eco: 5
+          payout: false
+          scale_with_output: true
         design:
           material: RABBIT_FOOT
           name: "Withdraw β5"
@@ -206,9 +209,12 @@ gui:
         type: BUTTON
         action: GIVE
         output_item:
-          material: DIAMOND
+          mythic: banana_pearl
           amount: 15
-        cost: 15
+        cost:
+          eco: 15
+          payout: false
+          scale_with_output: true
         design:
           material: RABBIT_FOOT
           name: "Withdraw β15"
@@ -219,9 +225,12 @@ gui:
         type: BUTTON
         action: GIVE
         output_item:
-          material: DIAMOND
+          mythic: banana_pearl
           amount: 50
-        cost: 50
+        cost:
+          eco: 50
+          payout: false
+          scale_with_output: true
         design:
           material: RABBIT_FOOT
           name: "Withdraw β50"
@@ -232,9 +241,12 @@ gui:
         type: BUTTON
         action: GIVE
         output_item:
-          material: DIAMOND
+          mythic: banana_pearl
           amount: 100
-        cost: 100
+        cost:
+          eco: 100
+          payout: false
+          scale_with_output: true
         design:
           material: RABBIT_FOOT
           name: "Withdraw β100"
@@ -300,7 +312,7 @@ gui:
           per_stack: true
           payout: true
         accepted_item:
-          mythic: RewardSword
+          mythic: banana_pearl
 
       deposit_animation_1:
         type: BUTTON

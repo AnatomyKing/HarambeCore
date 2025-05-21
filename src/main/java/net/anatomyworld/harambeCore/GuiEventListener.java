@@ -106,20 +106,78 @@ public class GuiEventListener implements Listener {
         switch (st) {
 
             /* ---------------- BUTTON ---------------- */
-            case BUTTON, HUSKHOME_BUTTON -> {           //  ⬅ added HUSKHOME_BUTTON
+            case BUTTON, HUSKHOME_BUTTON -> {
+                Map<Integer, String>  outputs = guiBuilder.getOutputItems(guiKey);
+                Map<Integer, Integer> pays    = guiBuilder.getPayoutAmounts(guiKey);
+                Map<Integer, Boolean> scaleOk = guiBuilder.getScaleWithOutput(guiKey);
+
                 double fee   = costs.getOrDefault(clicked, 0.0);
                 boolean give = costPay.getOrDefault(clicked, false);
                 e.setCancelled(true);
 
-                if (fee > 0) {
-                    if (give) EconomyHandler.depositBalance(p, fee);
-                    else if (!EconomyHandler.withdrawBalance(p, fee)) {
-                        p.sendMessage("§cYou need " + fee);
+                /* ---------- DEPOSIT-style buttons (payout: true) ---------- */
+                if (give) {
+                    if (fee > 0) EconomyHandler.depositBalance(p, fee);
+                    guiBuilder.handleButtonClick(p, guiKey, clicked);
+                    return;
+                }
+
+                /* ----------- WITHDRAW buttons (payout: false) ------------- */
+                if (fee <= 0) {                               // freebies
+                    guiBuilder.handleButtonClick(p, guiKey, clicked);
+                    return;
+                }
+
+                double bal = EconomyHandler.getBalance(p);
+
+                // enough money: do normal transaction
+                if (bal >= fee) {
+                    if (!EconomyHandler.withdrawBalance(p, fee)) {
+                        p.sendMessage("§cTransaction failed.");
                         return;
                     }
+                    guiBuilder.handleButtonClick(p, guiKey, clicked);
+                    return;
                 }
-                guiBuilder.handleButtonClick(p, guiKey, clicked);
+
+                // not enough → can we scale?
+                if (!scaleOk.getOrDefault(clicked, false) || !outputs.containsKey(clicked)) {
+                    p.sendMessage("§cYou need " + fee);
+                    return;
+                }
+
+                /* ------------- partial withdrawal logic ------------------ */
+                int baseAmt = pays.getOrDefault(clicked, 1);
+                String raw  = outputs.get(clicked);
+
+                int scaledAmt = (int) Math.floor((bal / fee) * baseAmt);
+                if (scaledAmt < 1) {
+                    p.sendMessage("§cInsufficient funds.");
+                    return;
+                }
+
+                double scaledCost = (fee / baseAmt) * scaledAmt;
+                if (!EconomyHandler.withdrawBalance(p, scaledCost)) {
+                    p.sendMessage("§cTransaction failed.");
+                    return;
+                }
+
+                // give the scaled items (inline, avoids extra helper)
+                if (raw.toUpperCase(Locale.ROOT).startsWith("MYTHIC:")) {
+                    String id = raw.substring("MYTHIC:".length());
+                    ItemStack it = itemRegistry.getItem(id);
+                    if (it != null) {
+                        it.setAmount(scaledAmt);
+                        p.getInventory().addItem(it);
+                    }
+                } else {
+                    Material mat = Material.matchMaterial(raw);
+                    if (mat != null) p.getInventory().addItem(new ItemStack(mat, scaledAmt));
+                }
+
+                p.sendMessage("§aWithdrew §e" + scaledAmt + "§a for §e" + scaledCost);
             }
+
 
             /* ---------------- INPUT_SLOT ------------ */
             case INPUT_SLOT -> {

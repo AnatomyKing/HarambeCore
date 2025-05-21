@@ -47,6 +47,7 @@ public class GuiBuilder {
     private final Map<String, Map<ActionType, ConfigurationSection>> huskHomeDesigns = new HashMap<>();
     private final Map<String, List<Integer>> huskHomeCreateSlots  = new HashMap<>();
     private final Map<String, List<Integer>> huskHomeDeleteSlots  = new HashMap<>();
+    private final Map<String, Map<Integer, Boolean>> guiScaleWithOutput = new HashMap<>();
 
 
     private final JavaPlugin      plugin;
@@ -82,6 +83,7 @@ public class GuiBuilder {
     public Map<Integer, Integer>         getReverseSlotConnections(String key)     { return guiReverseConnections.getOrDefault(key, Collections.emptyMap()); }
     public Map<Integer, String>          getCheckItems(String key)                 { return guiCheckItems.getOrDefault(key, Collections.emptyMap()); }
     public Map<Integer, String>          getRewardGroups(String key)               { return guiRewardGroups.getOrDefault(key, Collections.emptyMap()); }
+    public Map<Integer, Boolean> getScaleWithOutput(String key)                    { return guiScaleWithOutput.getOrDefault(key, Collections.emptyMap());}
 
     /* ---------------- cache reset on config reload ---------------- */
 
@@ -97,6 +99,7 @@ public class GuiBuilder {
         guiAcceptedItems.clear();
         guiAcceptedAmounts.clear();
         guiOutputItems.clear();
+        guiScaleWithOutput.clear();
         guiPayoutAmounts.clear();
         guiInputActions.clear();
         guiSlotConnections.clear();
@@ -151,6 +154,7 @@ public class GuiBuilder {
         Map<Integer, List<Integer>>   slotConnections = new HashMap<>();
         Map<Integer, String>          checkItems      = new HashMap<>();
         Map<Integer, String>          rewardGroups    = new HashMap<>();
+        Map<Integer, Boolean>         scaleMap       = new HashMap<>();
 
         ConfigurationSection buttonsSection = guiSection.getConfigurationSection("buttons");
         if (buttonsSection != null) {
@@ -167,6 +171,7 @@ public class GuiBuilder {
                 double  ecoCost  = 0.0;
                 boolean costPS   = false;
                 boolean costPay  = false;
+                boolean scaleOut = false;
                 Object  rc       = bc.get("cost");
                 if (rc instanceof Number n) {
                     ecoCost = n.doubleValue();
@@ -174,6 +179,7 @@ public class GuiBuilder {
                     ecoCost  = cs.getDouble("eco", 0.0);
                     costPS   = cs.getBoolean("per_stack", false);
                     costPay  = cs.getBoolean("payout", false);
+                    scaleOut = cs.getBoolean("scale_with_output", false);
                 }
 
                 switch (slotType) {
@@ -319,6 +325,7 @@ public class GuiBuilder {
                             if (ecoCost > 0) slotCosts.put(s, ecoCost);
                             if (costPS)      perStackMap.put(s, true);
                             if (costPay)     payoutMap.put(s, true);
+                            if (scaleOut)   scaleMap.put(s, true);
                             if (at == ActionType.COMMAND && logic != null) buttonLogics.put(s, logic);
                             if (at == ActionType.GIVE && outItem != null) {
                                 outputItems.put(s, outItem);
@@ -361,6 +368,7 @@ public class GuiBuilder {
         guiReverseConnections.put(guiKey, reverse);
         guiCheckItems.put(guiKey, checkItems);
         guiRewardGroups.put(guiKey, rewardGroups);
+        guiScaleWithOutput.put(guiKey, scaleMap);
         if (huskHomeSlots.containsKey(guiKey)) {
             populateHuskHomeButtons(guiKey, gui, Bukkit.getPlayer(playerId));
 
