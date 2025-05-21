@@ -2,6 +2,7 @@ package net.anatomyworld.harambeCore;
 
 import net.anatomyworld.harambeCore.storage.StorageManager;
 import net.anatomyworld.harambeCore.item.ItemRegistry;
+import net.anatomyworld.harambeCore.util.RandomGibberishNameGenerator;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.william278.huskhomes.api.HuskHomesAPI;
@@ -439,19 +440,17 @@ public class GuiBuilder {
                     return;
                 }
 
-                String name = ("homelink" + UUID.randomUUID()
-                        .toString().replace("-", "").substring(0, 5))
-                        .toLowerCase(Locale.ROOT);
+                //  ►  zobileba-3e2d9 ◄
+                String name = RandomGibberishNameGenerator.generate() + "-" +
+                        UUID.randomUUID().toString().substring(0, 5);
 
                 HuskHomesAPI.getInstance()
                         .createHome(user, name,
                                 HuskHomesAPI.getInstance().adaptPosition(player.getLocation()))
                         .thenAccept(h -> Bukkit.getScheduler().runTask(plugin, () -> {
                             player.sendMessage("§aCreated home §e" + name);
-
-                            // refresh the open GUI in-place
-                            Inventory inv = player.getOpenInventory().getTopInventory();
-                            populateHuskHomeButtons(guiKey, inv, player);
+                            populateHuskHomeButtons(guiKey,
+                                    player.getOpenInventory().getTopInventory(), player);
                         }))
                         .exceptionally(ex -> {
                             Bukkit.getScheduler().runTask(plugin,
