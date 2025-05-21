@@ -7,6 +7,7 @@ import net.anatomyworld.harambeCore.rewards.RewardHandler;
 import net.anatomyworld.harambeCore.util.EconomyHandler;
 import net.anatomyworld.harambeCore.util.recipebook.RecipeBookUtils;
 import org.bukkit.Material;
+import org.bukkit.permissions.PermissionAttachmentInfo;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -89,9 +90,21 @@ public class GuiEventListener implements Listener {
         int clicked = e.getSlot();
         if (e.getRawSlot() >= e.getInventory().getSize()) return;
 
+
+
         Map<Integer, SlotType>        slotTypes = guiBuilder.getGuiSlotTypes().get(guiKey);
         SlotType                      st        = slotTypes.get(clicked);
         if (st == null) return;
+
+        Map<Integer, String>         perms      = guiBuilder.getSlotPermissions(guiKey);
+
+        /* ────────────────── PERMISSION GATE ────────────────── */
+        String needed = perms.get(clicked);
+        if (needed != null && !p.hasPermission(needed)) {
+            e.setCancelled(true);
+            p.sendMessage("§cYou don’t have permission to use this.");
+            return;
+        }
 
         Map<Integer, String>         accepted   = guiBuilder.getAcceptedItems(guiKey);
         Map<Integer, Integer>        amounts    = guiBuilder.getAcceptedAmounts(guiKey);
@@ -104,6 +117,7 @@ public class GuiEventListener implements Listener {
         Map<Integer, String>         groupMap   = guiBuilder.getRewardGroups(guiKey);
         Map<Integer, String>         checkItems = guiBuilder.getCheckItems(guiKey);
         Map<Integer, Boolean>        copyMap    = guiBuilder.getCopyItems(guiKey);
+
 
         switch (st) {
 

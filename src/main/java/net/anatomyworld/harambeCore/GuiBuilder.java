@@ -7,6 +7,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.william278.huskhomes.api.HuskHomesAPI;
 import net.william278.huskhomes.position.Home;
+import net.william278.huskhomes.random.RandomTeleportProvider;
 import net.william278.huskhomes.user.OnlineUser;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -24,7 +25,7 @@ import java.util.*;
 public class GuiBuilder {
 
     public enum SlotType {BUTTON, INPUT_SLOT, CHECK_BUTTON, OUTPUT_SLOT, FILLER, STORAGE_SLOT, HUSKHOME_BUTTON}
-    public enum ActionType {COMMAND, GIVE, REWARD_GET, TELEPORT, CREATE, DELETE}
+    public enum ActionType {COMMAND, GIVE, REWARD_GET, TELEPORT, CREATE, DELETE, RANDOM_TELEPORT}
     public enum InputActionType {NONE, CONSUME}
 
     /* ---------------- cached data maps ---------------- */
@@ -47,8 +48,11 @@ public class GuiBuilder {
     private final Map<String, Map<ActionType, ConfigurationSection>> huskHomeDesigns = new HashMap<>();
     private final Map<String, List<Integer>> huskHomeCreateSlots  = new HashMap<>();
     private final Map<String, List<Integer>> huskHomeDeleteSlots  = new HashMap<>();
+    private final Map<String, List<Integer>> huskHomeRtpSlots = new HashMap<>();
     private final Map<String, Map<Integer, Boolean>> guiScaleWithOutput = new HashMap<>();
     private final Map<String, Map<Integer, Boolean>> guiCopyItems = new HashMap<>();
+    private final Map<String, String> guiRtpWorld = new HashMap<>();
+    private final Map<String, Map<Integer, String>> guiSlotPermissions = new HashMap<>();
 
 
 
@@ -87,6 +91,8 @@ public class GuiBuilder {
     public Map<Integer, String>          getRewardGroups(String key)               { return guiRewardGroups.getOrDefault(key, Collections.emptyMap()); }
     public Map<Integer, Boolean> getScaleWithOutput(String key)                    { return guiScaleWithOutput.getOrDefault(key, Collections.emptyMap()); }
     public Map<Integer, Boolean> getCopyItems(String key)                          { return guiCopyItems.getOrDefault(key, Collections.emptyMap()); }
+    public Map<Integer, String> getSlotPermissions(String key)                     {return guiSlotPermissions.getOrDefault(key, Collections.emptyMap());
+    }
 
     /* ---------------- cache reset on config reload ---------------- */
 
@@ -109,12 +115,16 @@ public class GuiBuilder {
         guiReverseConnections.clear();
         guiCheckItems.clear();
         guiRewardGroups.clear();
+        guiSlotPermissions.clear();
         guiCopyItems.clear();
 
+        //huskhomes
         huskHomeSlots.clear();
-        huskHomeDesigns.clear();   // <-- add
-        huskHomeCreateSlots.clear(); // ← add
-        huskHomeDeleteSlots.clear(); // ← add
+        huskHomeDesigns.clear();
+        huskHomeCreateSlots.clear();
+        huskHomeDeleteSlots.clear();
+        huskHomeRtpSlots.clear();
+        guiRtpWorld.clear();
 
         cachedFillerItem = createFillerItem();
     }
@@ -160,6 +170,7 @@ public class GuiBuilder {
         Map<Integer, String>          rewardGroups    = new HashMap<>();
         Map<Integer, Boolean>         scaleMap        = new HashMap<>();
         Map<Integer, Boolean>         copyMap         = new HashMap<>();
+        Map<Integer, String>          permMap         = new HashMap<>();
 
         ConfigurationSection buttonsSection = guiSection.getConfigurationSection("buttons");
         if (buttonsSection != null) {
@@ -169,6 +180,7 @@ public class GuiBuilder {
 
                 List<Integer> slots   = bc.getIntegerList("slot");
                 SlotType      slotType;
+                String permLine = bc.getString("perm", null);
                 try { slotType = SlotType.valueOf(bc.getString("type", "FILLER").toUpperCase(Locale.ROOT)); }
                 catch (IllegalArgumentException ex) { continue; }
 
@@ -217,6 +229,7 @@ public class GuiBuilder {
                         for (int s : slots) {
                             slotTypes.put(s, slotType);
                             inputActions.put(s, ia);
+                            if (permLine != null) permMap.put(s, permLine);
                             if (ecoCost > 0) slotCosts.put(s, ecoCost);
                             if (costPS)      perStackMap.put(s, true);
                             if (costPay)     payoutMap.put(s, true);
@@ -230,6 +243,7 @@ public class GuiBuilder {
                         String rGroup = extractRewardGroup(bc);
                         for (int s : slots) {
                             slotTypes.put(s, slotType);
+                            if (permLine != null) permMap.put(s, permLine);
                             if (ecoCost > 0) slotCosts.put(s, ecoCost);
                             if (costPS)      perStackMap.put(s, true);
                             if (costPay)     payoutMap.put(s, true);
@@ -246,29 +260,32 @@ public class GuiBuilder {
                     }
 
                     case HUSKHOME_BUTTON -> {
+                        /* -------- determine the button’s action -------- */
                         ActionType at = ActionType.valueOf(
                                 bc.getString("action", "TELEPORT").toUpperCase(Locale.ROOT));
 
-                        // remember the design block – only once per action per GUI
+                        /* -------- remember the design block once per action -------- */
                         huskHomeDesigns
                                 .computeIfAbsent(guiKey, k -> new EnumMap<>(ActionType.class))
                                 .putIfAbsent(at, bc.getConfigurationSection("design"));
 
-                        // paint placeholders & cache cost flags
+                        /* -------- paint placeholders & cache cost flags -------- */
                         for (int s : slots) {
                             slotTypes.put(s, slotType);
                             gui.setItem(s, cachedFillerItem);
+                            if (permLine != null) permMap.put(s, permLine);
                             if (ecoCost > 0) slotCosts.put(s, ecoCost);
                             if (costPS)      perStackMap.put(s, true);
                             if (costPay)     payoutMap.put(s, true);
                         }
 
-                        // remember slot lists by action
+                        /* -------- remember slot lists / logic by action -------- */
                         switch (at) {
-                            case TELEPORT ->
-                                    huskHomeSlots
-                                            .computeIfAbsent(guiKey, k -> new ArrayList<>())
-                                            .addAll(slots);
+
+                            case TELEPORT -> huskHomeSlots
+                                    .computeIfAbsent(guiKey, k -> new ArrayList<>())
+                                    .addAll(slots);
+
                             case CREATE -> huskHomeCreateSlots
                                     .computeIfAbsent(guiKey, k -> new ArrayList<>())
                                     .addAll(slots);
@@ -276,8 +293,19 @@ public class GuiBuilder {
                             case DELETE -> huskHomeDeleteSlots
                                     .computeIfAbsent(guiKey, k -> new ArrayList<>())
                                     .addAll(slots);
+
+                            case RANDOM_TELEPORT -> {
+                                String rtpWorld = bc.getString("tel_world", "world");      // read YAML
+
+                                huskHomeRtpSlots                                     // remember slots
+                                        .computeIfAbsent(guiKey, k -> new ArrayList<>())
+                                        .addAll(slots);
+
+                                guiRtpWorld.put(guiKey, rtpWorld);                   // remember world
+                            }
                         }
                     }
+
 
 
                     case BUTTON, CHECK_BUTTON -> {
@@ -335,7 +363,7 @@ public class GuiBuilder {
                         for (int s : slots) {
                             gui.setItem(s, btnItem);
                             slotTypes.put(s, slotType);
-
+                            if (permLine != null) permMap.put(s, permLine);
                             if (ecoCost  > 0) slotCosts.put(s, ecoCost);
                             if (costPS)       perStackMap.put(s, true);
                             if (costPay)      payoutMap.put(s, true);
@@ -389,10 +417,8 @@ public class GuiBuilder {
         guiRewardGroups.put(guiKey, rewardGroups);
         guiScaleWithOutput.put(guiKey, scaleMap);
         guiCopyItems.put(guiKey, copyMap);
-        if (huskHomeSlots.containsKey(guiKey)) {
-            populateHuskHomeButtons(guiKey, gui, Bukkit.getPlayer(playerId));
-
-        }
+        guiSlotPermissions.put(guiKey, permMap);
+        populateHuskHomeButtons(guiKey, gui, Bukkit.getPlayer(playerId));
         return gui;
     }
 
@@ -505,6 +531,17 @@ public class GuiBuilder {
                         populateHuskHomeButtons(guiKey, inv, player);
                     });
                 });
+                return;
+            }
+
+            if (cmdLine.startsWith("huskhomes:rtp:")) {
+                String worldName = cmdLine.substring("huskhomes:rtp:".length()).trim();
+                if (!worldName.isEmpty()) {
+                    Bukkit.dispatchCommand(
+                            Bukkit.getConsoleSender(),
+                            "rtp " + player.getName() + " " + worldName
+                    );
+                }
                 return;
             }
 
@@ -648,6 +685,27 @@ public class GuiBuilder {
                             }
                         }
                     }
+
+                    /* RANDOM TELEPORT row ----------------------------------------- */
+                    var rtpSlots = huskHomeRtpSlots.get(guiKey);
+                    if (rtpSlots != null) {
+                        String worldName = guiRtpWorld.getOrDefault(guiKey, "world");
+
+                        ItemStack pearl = createButtonItem(
+                                "ENDER_PEARL",
+                                "&aRandom Teleport",
+                                0);
+
+                        for (int s : rtpSlots) {
+                            gui.setItem(s, pearl);
+
+                            // re-write click logic every repaint
+                            buttonLogicCache
+                                    .computeIfAbsent(guiKey, k -> new HashMap<>())
+                                    .put(s, "huskhomes:rtp:" + worldName);
+                        }
+                    }
+
 
                     /* ───────────────────── CREATE row ───────────────────────── */
                     if (crtSlots != null) {

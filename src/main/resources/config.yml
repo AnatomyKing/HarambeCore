@@ -366,5 +366,14 @@ gui:
         design:
           material: BARRIER
           name: "&cDelete &a%home_name%"
+      epic_buttons:
+        slot: [ 43 ]        # put one or more RTP pearls wherever you like
+        type: HUSKHOME_BUTTON
+        action: RANDOM_TELEPORT
+        tel_world: new
+        cost: 0
+        design:
+          material: LIGHT
+          name: "&aRandom Teleport"
 
 
