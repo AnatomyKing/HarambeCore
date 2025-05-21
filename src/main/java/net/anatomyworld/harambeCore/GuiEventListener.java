@@ -324,35 +324,42 @@ public class GuiEventListener implements Listener {
             case OUTPUT_SLOT -> {
                 e.setCancelled(true);
                 String group = groupMap.get(clicked);
-                if (group == null) {
-                    p.sendMessage("§cNo group."); return;
-                }
+                if (group == null) { p.sendMessage("§cNo group."); return; }
 
-                List<String> rewards = rewardHandler.playerData().getAllRewards(p.getUniqueId(), group);
-                if (rewards.isEmpty()) {
+                // ⬇️  ➜ RE-ADD THIS LINE  ⬇️
+                List<Integer> outs = outputSlotsForGroup(slotTypes, groupMap, group);
+
+                Map<String,Integer> rewardMap =
+                        rewardHandler.playerData().getAllRewards(p.getUniqueId(), group);
+                if (rewardMap.isEmpty()) {
                     p.sendMessage("§cNo rewards."); return;
                 }
 
-                List<Integer> outs = outputSlotsForGroup(slotTypes, groupMap, group);
+                /* which reward does this slot represent? */
+                List<String> keys = new ArrayList<>(rewardMap.keySet());      // order doesn't matter
                 int idx = outs.indexOf(clicked);
-                if (idx >= rewards.size()) {
+                if (idx < 0 || idx >= keys.size()) {                          // empty cell
                     e.getInventory().setItem(clicked, null); return;
                 }
 
-                String id = rewards.get(idx);
+                String  id    = keys.get(idx);
+                int     count = rewardMap.get(id);
+
                 ItemStack rewardItem = itemRegistry.getItem(id);
                 if (rewardItem == null) return;
 
+                int stack = Math.min(count, rewardItem.getMaxStackSize());
+                rewardItem.setAmount(stack);
                 p.getInventory().addItem(rewardItem);
-                rewardHandler.playerData().removeReward(p.getUniqueId(), group, id);
+
+                rewardHandler.playerData().removeReward(p.getUniqueId(), group, id, stack);
 
                 paintRetrieval(
                         e.getInventory(),
                         slotTypes,
                         groupMap,
                         group,
-                        rewardHandler.playerData().getAllRewards(p.getUniqueId(), group)
-                );
+                        rewardHandler.playerData().getAllRewards(p.getUniqueId(), group));
             }
 
             /* ---------------- FILLER ---------------- */
@@ -373,13 +380,22 @@ public class GuiEventListener implements Listener {
                                 Map<Integer, SlotType> slotTypes,
                                 Map<Integer, String>   groupMap,
                                 String                 group,
-                                List<String>           rewards) {
+                                Map<String,Integer>    rewards) {
+
         List<Integer> outs = outputSlotsForGroup(slotTypes, groupMap, group);
+        List<String>  ids  = new ArrayList<>(rewards.keySet());
+
         for (int i = 0; i < outs.size(); i++) {
-            int s = outs.get(i);
-            inv.setItem(s, i < rewards.size()
-                    ? itemRegistry.getItem(rewards.get(i))
-                    : null);
+            int slot = outs.get(i);
+            if (i >= ids.size()) { inv.setItem(slot, null); continue; }
+
+            String id  = ids.get(i);
+            int qty    = rewards.get(id);
+            ItemStack it = itemRegistry.getItem(id);
+            if (it == null) { inv.setItem(slot, null); continue; }
+
+            it.setAmount(Math.min(qty, it.getMaxStackSize()));
+            inv.setItem(slot, it);
         }
     }
 

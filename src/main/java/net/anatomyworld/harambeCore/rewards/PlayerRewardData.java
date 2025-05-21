@@ -2,17 +2,17 @@
 package net.anatomyworld.harambeCore.rewards;
 
 import net.anatomyworld.harambeCore.config.YamlConfigLoader;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
-/**
- * Manages the <strong>rewards</strong> section inside each player's YAML file.
- * Now uses YamlConfigLoader to create /playerdata/<uuid>.yml automatically.
- */
+
 public class PlayerRewardData {
 
     private final JavaPlugin plugin;
@@ -25,30 +25,62 @@ public class PlayerRewardData {
     /*  Public API                                                */
     /* ---------------------------------------------------------- */
 
-    public void addReward(UUID id, String group, String reward) {
-        FileConfiguration y = loadConfig(id);
-        List<String> list  = y.getStringList(path(group));
-        list.add(reward);
-        y.set(path(group), list);
-        saveConfig(id, y);
+    /* ---------- add ---------- */
+
+    public void addReward(UUID id, String group, String rewardId) {
+        addReward(id, group, rewardId, 1);
     }
 
-    public List<String> getAllRewards(UUID id, String group) {
-        return new ArrayList<>(loadConfig(id).getStringList(path(group)));
+    public void addReward(UUID id, String group, String rewardId, int amount) {
+        if (amount <= 0) return;
+
+        FileConfiguration yml = loadConfig(id);
+        String path           = path(group) + "." + rewardId;
+        int   old             = yml.getInt(path, 0);
+
+        yml.set(path, old + amount);
+        saveConfig(id, yml);
     }
 
-    public void removeReward(UUID id, String group, String reward) {
-        FileConfiguration y = loadConfig(id);
-        List<String> list  = y.getStringList(path(group));
-        list.remove(reward);
-        y.set(path(group), list);
-        saveConfig(id, y);
+    /* ---------- query ---------- */
+
+    /** @return map of rewardId → count (empty if none) */
+    public Map<String, Integer> getAllRewards(UUID id, String group) {
+        FileConfiguration yml   = loadConfig(id);
+        ConfigurationSection sec = yml.getConfigurationSection(path(group));
+        if (sec == null) return new HashMap<>();
+
+        Map<String, Integer> map = new HashMap<>();
+        for (String key : sec.getKeys(false)) {
+            map.put(key, sec.getInt(key, 0));
+        }
+        return map;
+    }
+
+    /* ---------- remove ---------- */
+
+    public void removeReward(UUID id, String group, String rewardId) {
+        removeReward(id, group, rewardId, 1);
+    }
+
+    public void removeReward(UUID id, String group, String rewardId, int amount) {
+        if (amount <= 0) return;
+
+        FileConfiguration yml = loadConfig(id);
+        String path           = path(group) + "." + rewardId;
+        int   old             = yml.getInt(path, 0);
+        int   now             = old - amount;
+
+        if (now <= 0) yml.set(path, null);
+        else          yml.set(path, now);
+
+        saveConfig(id, yml);
     }
 
     public void removeGroup(UUID id, String group) {
-        FileConfiguration y = loadConfig(id);
-        y.set("rewards." + group, null);
-        saveConfig(id, y);
+        FileConfiguration yml = loadConfig(id);
+        yml.set("rewards." + group, null);
+        saveConfig(id, yml);
     }
 
     /* ---------------------------------------------------------- */
@@ -59,7 +91,7 @@ public class PlayerRewardData {
         return "rewards." + group + ".queued";
     }
 
-    /** Delegates to YamlConfigLoader — creates playerdata/<uuid>.yml if missing */
+    /** Loads (and auto-creates) playerdata/&lt;uuid&gt;.yml */
     private FileConfiguration loadConfig(UUID id) {
         return YamlConfigLoader.load(plugin, "playerdata/" + id + ".yml");
     }
