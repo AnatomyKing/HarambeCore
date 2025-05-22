@@ -2,6 +2,7 @@
 package net.anatomyworld.harambeCore;
 
 import net.anatomyworld.harambeCore.config.YamlConfigLoader;
+import net.anatomyworld.harambeCore.death.DeathListener;
 import net.anatomyworld.harambeCore.dialogue.DialogueListeners;
 import net.anatomyworld.harambeCore.dialogue.DialogueModule;
 import net.anatomyworld.harambeCore.item.ItemRegistry;
@@ -93,6 +94,8 @@ public final class HarambeCore extends JavaPlugin {
                 rewardGroupModule.getManager(),
                 playerData
         );
+
+        new DeathListener(this, rewardHandler);// ✨ NEW
 
         // Commands & GUI listener
         commandHandler = new CommandHandler(

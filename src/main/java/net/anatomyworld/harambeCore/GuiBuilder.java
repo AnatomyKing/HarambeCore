@@ -26,7 +26,7 @@ import java.util.*;
 public class GuiBuilder {
 
     public enum SlotType {BUTTON, INPUT_SLOT, CHECK_BUTTON, OUTPUT_SLOT, FILLER, STORAGE_SLOT, HUSKHOME_BUTTON}
-    public enum ActionType {COMMAND, GIVE, REWARD_GET, TELEPORT, CREATE, DELETE, RANDOM_TELEPORT, PAGE}
+    public enum ActionType {COMMAND, GIVE, REWARD_GET, TELEPORT, CREATE, DELETE, RANDOM_TELEPORT, PAGE, DEATH_ITEMS, DEATH_GET}
     public enum InputActionType {NONE, CONSUME}
 
     /* ---------------- cached data maps ---------------- */
@@ -257,15 +257,28 @@ public class GuiBuilder {
 
                     /* ---------------- OUTPUT_SLOT --------------- */
                     case OUTPUT_SLOT -> {
-                        ActionType at = ActionType.valueOf(bc.getString("action", "REWARD_GET").toUpperCase(Locale.ROOT));
-                        String rGroup = extractRewardGroup(bc);
+                        ActionType at = ActionType.valueOf(
+                                bc.getString("action", "REWARD_GET").toUpperCase(Locale.ROOT));
+                        String    rGroup = extractRewardGroup(bc);
+
+    /* ─── NEW: for death-chest slots we need both logic *and* an
+       entry in rewardGroups so groupMap.get(slot) != null later ─── */
+                        if (at == ActionType.DEATH_GET) {
+                            for (int s : slots) {
+                                buttonLogics.put(s, "DEATH_GET");
+                                rewardGroups.put(s, "");  // placeholder so groupMap.containsKey(s) == true
+                            }
+                        }
+
+                        /* ─── now do the normal OUTPUT_SLOT setup ─── */
                         for (int s : slots) {
-                            slotTypes.put(s, slotType);
-                            if (permLine != null) permMap.put(s, permLine);
-                            if (ecoCost > 0) slotCosts.put(s, ecoCost);
-                            if (costPS)      perStackMap.put(s, true);
-                            if (costPay)     payoutMap.put(s, true);
-                            if (rGroup != null && at == ActionType.REWARD_GET) rewardGroups.put(s, rGroup);
+                            slotTypes.put(s, SlotType.OUTPUT_SLOT);
+                            if (permLine != null)     permMap.put(s, permLine);
+                            if (ecoCost > 0)          slotCosts.put(s, ecoCost);
+                            if (costPS)               perStackMap.put(s, true);
+                            if (costPay)              payoutMap.put(s, true);
+                            if (rGroup != null && at == ActionType.REWARD_GET)
+                                rewardGroups.put(s, rGroup);
                         }
                     }
 
@@ -330,72 +343,87 @@ public class GuiBuilder {
 
 
                     case BUTTON, CHECK_BUTTON -> {
-                        ActionType at    = ActionType.valueOf(
-                                bc.getString("action", "COMMAND").toUpperCase(Locale.ROOT));
-                        String     logic = bc.getString("logic");
 
-                        /* ── special case: ActionType.PAGE ───── */
+                        /* ------------------------------------------------------------ */
+                        /*  1)  Action & optional page-button special-case               */
+                        /* ------------------------------------------------------------ */
+                        ActionType at = ActionType.valueOf(
+                                bc.getString("action", "COMMAND").toUpperCase(Locale.ROOT));
+                        String logic = bc.getString("logic");           // optional custom tag
+
+                        /* ─── PAGE buttons (next / back) ───────────────────────────── */
                         if (at == ActionType.PAGE) {
-                            int delta = bc.getInt("page_offset", 0);           // +1 or -1
+                            int  delta = bc.getInt("page_offset", 0);          // +1 or −1
                             ConfigurationSection d = bc.getConfigurationSection("design");
 
                             ItemStack icon = createButtonItem(
-                                    d != null ? d.getString("material","ARROW")     : "ARROW",
+                                    d != null ? d.getString("material", "ARROW") : "ARROW",
                                     d != null ? d.getString("name",
                                             delta > 0 ? "&aNext ▶" : "&c◀ Back") : "&aPage",
-                                    d != null ? d.getInt("custom_model_data",0)   : 0);
+                                    d != null ? d.getInt("custom_model_data", 0) : 0);
 
                             for (int s : slots) {
                                 gui.setItem(s, icon);
                                 slotTypes.put(s, SlotType.BUTTON);
-
-                                // ensure positive offsets get a '+' prefix
-                                String signed = (delta > 0 ? "+" : "") + delta;
-                                buttonLogics.put(s, "page:" + signed);
-
+                                buttonLogics.put(s, "page:" + (delta > 0 ? "+" : "") + delta);
                                 if (permLine != null) permMap.put(s, permLine);
                             }
-                            continue;  // skip normal button logic
+                            continue;                 // PAGE finished – skip the rest
                         }
 
+                        /* ─── NEW: mark DEATH_ITEMS / DEATH_GET slots early ─────────── */
+                        if (at == ActionType.DEATH_ITEMS || at == ActionType.DEATH_GET) {
+                            for (int s : slots) buttonLogics.put(s, at.name());   // "DEATH_ITEMS" | "DEATH_GET"
+                        }
 
-                        /* ---------- optional output_item parsing (for ActionType.GIVE) ---------- */
+                        /* ------------------------------------------------------------ */
+                        /*  2)  Optional output_item (for ActionType.GIVE)              */
+                        /* ------------------------------------------------------------ */
                         String outItem = null;
                         int    payAmt  = 1;
                         Object oi      = bc.get("output_item");
+
                         if (oi instanceof ConfigurationSection oc) {
                             String myth = oc.getString("mythic");
                             String mat  = oc.getString("material");
 
-                            if (myth != null && !myth.isEmpty()) {
-                                outItem = "MYTHIC:" + myth;
-                            } else if (mat != null && !mat.isEmpty()) {
-                                outItem = mat.toUpperCase(Locale.ROOT);
-                            }
+                            if      (myth != null && !myth.isEmpty()) outItem = "MYTHIC:" + myth;
+                            else if (mat  != null && !mat.isEmpty())  outItem = mat.toUpperCase(Locale.ROOT);
+
                             payAmt = oc.getInt("amount", 1);
+
                         } else if (oi instanceof String s) {
                             outItem = s.toUpperCase(Locale.ROOT);
                             payAmt  = bc.getInt("payout_amount", 1);
                         }
 
-                        /* ---------- slot-connection & reward-group ---------- */
+                        /* ------------------------------------------------------------ */
+                        /*  3)  Slot-connection / reward-group parsing                  */
+                        /* ------------------------------------------------------------ */
                         String connectKey = bc.getString("slot_connection");
                         String rGroup     = extractRewardGroup(bc);
 
                         List<Integer> connected = new ArrayList<>();
-                        if (connectKey != null && buttonsSection.isConfigurationSection(connectKey))
+                        if (connectKey != null && buttonsSection.isConfigurationSection(connectKey)) {
                             connected = Objects.requireNonNull(
-                                    buttonsSection.getConfigurationSection(connectKey)).getIntegerList("slot");
-
-                        /* ---------- NEW: copy_item flag (only relevant for CHECK_BUTTON) ---------- */
-                        boolean copyFlag = false;
-                        if (slotType == SlotType.CHECK_BUTTON && bc.isConfigurationSection("check_item")) {
-                            copyFlag = Objects.requireNonNull(bc.getConfigurationSection("check_item")).getBoolean("copy_item", false);
+                                            buttonsSection.getConfigurationSection(connectKey))
+                                    .getIntegerList("slot");
                         }
 
-                        /* ---------- button item design ---------- */
+                        /*  copy_item flag (only relevant for CHECK_BUTTON)  */
+                        boolean copyFlag = false;
+                        if (slotType == SlotType.CHECK_BUTTON && bc.isConfigurationSection("check_item")) {
+                            copyFlag = Objects.requireNonNull(
+                                            bc.getConfigurationSection("check_item"))
+                                    .getBoolean("copy_item", false);
+                        }
+
+                        /* ------------------------------------------------------------ */
+                        /*  4)  Button item design                                      */
+                        /* ------------------------------------------------------------ */
                         ConfigurationSection d = bc.getConfigurationSection("design");
                         ItemStack btnItem;
+
                         if (d != null && d.contains("mythic")) {
                             btnItem = itemRegistry.getItem(d.getString("mythic"));
                             if (btnItem == null) btnItem = new ItemStack(Material.BARRIER);
@@ -406,26 +434,35 @@ public class GuiBuilder {
                             btnItem = createButtonItem(matName, itemName, cmd);
                         }
 
-                        /* ---------- apply to every slot in this logical button ---------- */
+                        /* ------------------------------------------------------------ */
+                        /*  5)  Apply to every physical slot in this logical button     */
+                        /* ------------------------------------------------------------ */
                         for (int s : slots) {
                             gui.setItem(s, btnItem);
                             slotTypes.put(s, slotType);
+
                             if (permLine != null) permMap.put(s, permLine);
-                            if (ecoCost  > 0) slotCosts.put(s, ecoCost);
-                            if (costPS)       perStackMap.put(s, true);
-                            if (costPay)      payoutMap.put(s, true);
-                            if (scaleOut)     scaleMap.put(s, true);
+                            if (ecoCost  > 0)     slotCosts.put(s, ecoCost);
+                            if (costPS)           perStackMap.put(s, true);
+                            if (costPay)          payoutMap.put(s, true);
+                            if (scaleOut)         scaleMap.put(s, true);
 
                             if (slotType == SlotType.CHECK_BUTTON && copyFlag) copyMap.put(s, true);
 
-                            if (at == ActionType.COMMAND && logic != null) buttonLogics.put(s, logic);
+                            /* command logic tag */
+                            if (at == ActionType.COMMAND && logic != null)
+                                buttonLogics.put(s, logic);
 
+                            /* GIVE-button output item */
                             if (at == ActionType.GIVE && outItem != null) {
                                 outputItems.put(s, outItem);
                                 payoutAmounts.put(s, payAmt);
                             }
 
+                            /* reward-group for REWARD_GET buttons */
                             if (rGroup != null)          checkItems.put(s, rGroup);
+
+                            /* input-slot connections */
                             if (!connected.isEmpty())    slotConnections.put(s, connected);
                         }
                     }

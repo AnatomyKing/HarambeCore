@@ -1,7 +1,7 @@
 filler:
-  material: "RABBIT_FOOT"
-  custom_model_data: 27104
-  name: "&8" # "BLACK_STAINED_GLASS_PANE" invisible name for filler slots
+  material: "BLACK_STAINED_GLASS_PANE"
+  custom_model_data: 0
+  name: "&8" # "BLACK_STAINED_GLASS_PANE" RABBIT_FOOT 27104 invisible name for filler slots
 
 gui:
 
@@ -375,5 +375,42 @@ gui:
         design:
           material: LIGHT
           name: "&aRandom Teleport"
+
+  death_chest:
+    title: "&cDeath Chest"
+    size: 54
+    buttons:
+      # Submit the Death Key (paper) to unlock a specific victim’s chest
+      death_key_submit:
+        slot: [ 52 ]
+        type: CHECK_BUTTON
+        slot_connection: death_key_submit_slot
+        check_item:
+          material: PAPER
+          reward_group: death_items
+        design:
+          material: DIAMOND
+          name: "&cSubmit Death Key"
+          custom_model_data: 0
+
+      # Where the player places their Death Key
+      death_key_submit_slot:
+        slot: [ 49 ]
+        type: INPUT_SLOT
+        action: CONSUME
+        accepted_item:
+          material: PAPER
+
+  death_collect:
+    title: "death collect"
+    size: 54
+    buttons:
+
+      retrieve_slot_death_collect:
+        slot: [ 45, 46, 47, 48, 50, 51 ]
+        type: OUTPUT_SLOT
+        action: REWARD_GET
+        reward_group: death_items
+
 
 
