@@ -117,19 +117,36 @@ public class GuiEventListener implements Listener {
         Map<Integer, String>         groupMap   = guiBuilder.getRewardGroups(guiKey);
         Map<Integer, String>         checkItems = guiBuilder.getCheckItems(guiKey);
         Map<Integer, Boolean>        copyMap    = guiBuilder.getCopyItems(guiKey);
+        Map<Integer,String>          logicMap = guiBuilder.getButtonLogic(guiKey);
 
+
+        int page = guiBuilder.getPage(p.getUniqueId(), guiKey);
 
         switch (st) {
 
             /* ---------------- BUTTON ---------------- */
             case BUTTON, HUSKHOME_BUTTON -> {
-                Map<Integer, String>  outputs = guiBuilder.getOutputItems(guiKey);
-                Map<Integer, Integer> pays    = guiBuilder.getPayoutAmounts(guiKey);
-                Map<Integer, Boolean> scaleOk = guiBuilder.getScaleWithOutput(guiKey);
+                Map<Integer,String>  outputs = guiBuilder.getOutputItems(guiKey);
+                Map<Integer,Integer> pays    = guiBuilder.getPayoutAmounts(guiKey);
+                Map<Integer,Boolean> scaleOk = guiBuilder.getScaleWithOutput(guiKey);
 
-                double fee   = costs.getOrDefault(clicked, 0.0);
-                boolean give = costPay.getOrDefault(clicked, false);
-                e.setCancelled(true);
+                double  fee   = costs.getOrDefault(clicked, 0.0);
+                boolean give  = costPay.getOrDefault(clicked, false);
+                e.setCancelled(true);  // always cancel vanilla handling
+
+                // ── PAGE buttons: parse whatever integer follows "page:"
+                if (logicMap != null) {
+                    String tag = logicMap.get(clicked);
+                    if (tag != null && tag.startsWith("page:")) {
+                        try {
+                            int delta = Integer.parseInt(tag.substring("page:".length()));
+                            switchPage(p, guiKey, page + delta);
+                        } catch (NumberFormatException ignored) {
+                            // not a valid page:<number> tag
+                        }
+                        return;
+                    }
+                }
 
                 /* ---------- DEPOSIT-style buttons (payout: true) ---------- */
                 if (give) {
@@ -139,7 +156,7 @@ public class GuiEventListener implements Listener {
                 }
 
                 /* ----------- WITHDRAW buttons (payout: false) ------------- */
-                if (fee <= 0) {                               // freebies
+                if (fee <= 0) {  // freebies
                     guiBuilder.handleButtonClick(p, guiKey, clicked);
                     return;
                 }
@@ -163,10 +180,10 @@ public class GuiEventListener implements Listener {
                 }
 
                 /* ------------- partial withdrawal logic ------------------ */
-                int baseAmt = pays.getOrDefault(clicked, 1);
-                String raw  = outputs.get(clicked);
+                int    baseAmt   = pays.getOrDefault(clicked, 1);
+                String raw       = outputs.get(clicked);
+                int    scaledAmt = (int) Math.floor((bal / fee) * baseAmt);
 
-                int scaledAmt = (int) Math.floor((bal / fee) * baseAmt);
                 if (scaledAmt < 1) {
                     p.sendMessage("§cInsufficient funds.");
                     return;
@@ -178,7 +195,7 @@ public class GuiEventListener implements Listener {
                     return;
                 }
 
-                // give the scaled items (inline, avoids extra helper)
+                // give the scaled items
                 if (raw.toUpperCase(Locale.ROOT).startsWith("MYTHIC:")) {
                     String id = raw.substring("MYTHIC:".length());
                     ItemStack it = itemRegistry.getItem(id);
@@ -191,7 +208,7 @@ public class GuiEventListener implements Listener {
                     if (mat != null) p.getInventory().addItem(new ItemStack(mat, scaledAmt));
                 }
 
-                p.sendMessage("§aWithdrew §e" + scaledAmt + "§a for §e" + scaledCost);
+                p.sendMessage("§aWithdrew §e" + scaledAmt + " §afor §e" + scaledCost);
             }
 
 
@@ -466,5 +483,18 @@ public class GuiEventListener implements Listener {
         });
         Collections.sort(list);
         return list;
+    }
+
+    private void switchPage(Player p, String guiKey, int target){
+        int max = guiBuilder.getMaxPages(guiKey);
+        if (target < 0 || target >= max) return;
+
+        UUID id = p.getUniqueId();
+        guiBuilder.handleGuiClose(p, p.getOpenInventory().getTopInventory()); // save current
+        guiBuilder.setPage(id, guiKey, target);
+
+        Inventory fresh = guiBuilder.generateGui(guiKey, id, target);
+        guiBuilder.playerGuis.get(id).put(guiKey, fresh);
+        p.openInventory(fresh);
     }
 }

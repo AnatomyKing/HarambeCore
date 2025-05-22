@@ -19,17 +19,18 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
+import java.util.concurrent.ConcurrentHashMap;
 
 import java.util.*;
 
 public class GuiBuilder {
 
     public enum SlotType {BUTTON, INPUT_SLOT, CHECK_BUTTON, OUTPUT_SLOT, FILLER, STORAGE_SLOT, HUSKHOME_BUTTON}
-    public enum ActionType {COMMAND, GIVE, REWARD_GET, TELEPORT, CREATE, DELETE, RANDOM_TELEPORT}
+    public enum ActionType {COMMAND, GIVE, REWARD_GET, TELEPORT, CREATE, DELETE, RANDOM_TELEPORT, PAGE}
     public enum InputActionType {NONE, CONSUME}
 
     /* ---------------- cached data maps ---------------- */
-    private final Map<UUID, Map<String, Inventory>> playerGuis              = new HashMap<>();
+    final Map<UUID, Map<String, Inventory>> playerGuis              = new HashMap<>();
     private final Map<String, Map<Integer, SlotType>>    guiSlotTypes       = new HashMap<>();
     private final Map<String, Map<Integer, String>>     buttonLogicCache    = new HashMap<>();
     private final Map<String, Map<Integer, Double>>     guiSlotCosts        = new HashMap<>();
@@ -53,6 +54,9 @@ public class GuiBuilder {
     private final Map<String, Map<Integer, Boolean>> guiCopyItems = new HashMap<>();
     private final Map<String, String> guiRtpWorld = new HashMap<>();
     private final Map<String, Map<Integer, String>> guiSlotPermissions = new HashMap<>();
+    private static final int PAGE_STRIDE = 1000; // virtual index step
+    private final Map<UUID, Map<String,Integer>> guiPage     = new ConcurrentHashMap<>();
+    private final Map<String,Integer>            guiMaxPages = new ConcurrentHashMap<>();
 
 
 
@@ -91,8 +95,12 @@ public class GuiBuilder {
     public Map<Integer, String>          getRewardGroups(String key)               { return guiRewardGroups.getOrDefault(key, Collections.emptyMap()); }
     public Map<Integer, Boolean> getScaleWithOutput(String key)                    { return guiScaleWithOutput.getOrDefault(key, Collections.emptyMap()); }
     public Map<Integer, Boolean> getCopyItems(String key)                          { return guiCopyItems.getOrDefault(key, Collections.emptyMap()); }
-    public Map<Integer, String> getSlotPermissions(String key)                     {return guiSlotPermissions.getOrDefault(key, Collections.emptyMap());
-    }
+    public Map<Integer, String> getSlotPermissions(String key)                     { return guiSlotPermissions.getOrDefault(key, Collections.emptyMap()); }
+    public Map<Integer,String> getButtonLogic(String guiKey)                       { return buttonLogicCache.getOrDefault(guiKey, Collections.emptyMap()); }
+
+    public int  getPage(UUID id, String key){ return guiPage.getOrDefault(id, Collections.emptyMap()).getOrDefault(key,0);}
+    public void setPage(UUID id, String key,int p){ guiPage.computeIfAbsent(id,k->new HashMap<>()).put(key,p);}
+    public int  getMaxPages(String key){ return guiMaxPages.getOrDefault(key,9999);}
 
     /* ---------------- cache reset on config reload ---------------- */
 
@@ -135,9 +143,9 @@ public class GuiBuilder {
     }
 
     public void createAndOpenGui(String guiKey, Player player) {
-        Inventory gui = playerGuis
-                .computeIfAbsent(player.getUniqueId(), k -> new HashMap<>())
-                .computeIfAbsent(guiKey, k -> generateGui(guiKey, player.getUniqueId()));
+                setPage(player.getUniqueId(), guiKey, 0);
+                Inventory gui = generateGui(guiKey, player.getUniqueId(), 0);
+                playerGuis.computeIfAbsent(player.getUniqueId(),k->new HashMap<>()).put(guiKey, gui);
         if (gui != null) player.openInventory(gui);
         else player.sendMessage("§cInvalid GUI configuration for '" + guiKey + "'!");
     }
@@ -146,13 +154,20 @@ public class GuiBuilder {
     /*               GUI creation & parsing                            */
     /* --------------------------------------------------------------- */
 
-    private Inventory generateGui(String guiKey, UUID playerId) {
+    Inventory generateGui(String guiKey, UUID playerId, int page) {
         ConfigurationSection guiSection = config.getConfigurationSection("gui." + guiKey);
         if (guiSection == null) return null;
 
-        String title = guiSection.getString("title", "&cUnnamed GUI");
-        int size     = guiSection.getInt("size", 54);
-        Component titleComponent = LegacyComponentSerializer.legacySection().deserialize(title);
+        int maxPages = guiSection.getInt("max_pages", 9999);
+        guiMaxPages.put(guiKey, maxPages);
+
+        /* add %page% → 1-based page number */
+        String rawTitle = guiSection.getString("title", "&cUnnamed GUI")
+                .replace("%page%", String.valueOf(page + 1));
+
+        int size = guiSection.getInt("size", 54);
+        Component titleComponent =
+                LegacyComponentSerializer.legacySection().deserialize(rawTitle);
         Inventory gui = Bukkit.createInventory(null, size, titleComponent);
 
         Map<Integer, SlotType>        slotTypes       = new HashMap<>();
@@ -176,10 +191,13 @@ public class GuiBuilder {
         if (buttonsSection != null) {
             for (String buttonKey : buttonsSection.getKeys(false)) {
                 ConfigurationSection bc = buttonsSection.getConfigurationSection(buttonKey);
-                if (bc == null) continue;
+                if (bc == null) continue;                     // 1 – null-guard first
 
-                List<Integer> slots   = bc.getIntegerList("slot");
-                SlotType      slotType;
+                List<Integer> visible = bc.getIntegerList("pages"); // 2 – page filter
+                if (!visible.isEmpty() && !visible.contains(page)) continue;
+
+                List<Integer> slots = bc.getIntegerList("slot");
+                SlotType slotType;
                 String permLine = bc.getString("perm", null);
                 try { slotType = SlotType.valueOf(bc.getString("type", "FILLER").toUpperCase(Locale.ROOT)); }
                 catch (IllegalArgumentException ex) { continue; }
@@ -252,12 +270,15 @@ public class GuiBuilder {
                     }
 
                     case STORAGE_SLOT -> {
-                        Map<Integer, ItemStack> storage = storageManager.getOrCreateStorage(playerId, guiKey);
+                        Map<Integer,ItemStack> store = storageManager.getOrCreateStorage(playerId, guiKey);
                         for (int s : slots) {
+                            int v = page * PAGE_STRIDE + s;                 // virtual key
+                            if (store.containsKey(v)) gui.setItem(s, store.get(v));
                             slotTypes.put(s, slotType);
-                            if (storage.containsKey(s)) gui.setItem(s, storage.get(s));
+                            if (permLine != null) permMap.put(s, permLine);
                         }
                     }
+
 
                     case HUSKHOME_BUTTON -> {
                         /* -------- determine the button’s action -------- */
@@ -309,8 +330,34 @@ public class GuiBuilder {
 
 
                     case BUTTON, CHECK_BUTTON -> {
-                        ActionType at    = ActionType.valueOf(bc.getString("action", "COMMAND").toUpperCase(Locale.ROOT));
+                        ActionType at    = ActionType.valueOf(
+                                bc.getString("action", "COMMAND").toUpperCase(Locale.ROOT));
                         String     logic = bc.getString("logic");
+
+                        /* ── special case: ActionType.PAGE ───── */
+                        if (at == ActionType.PAGE) {
+                            int delta = bc.getInt("page_offset", 0);           // +1 or -1
+                            ConfigurationSection d = bc.getConfigurationSection("design");
+
+                            ItemStack icon = createButtonItem(
+                                    d != null ? d.getString("material","ARROW")     : "ARROW",
+                                    d != null ? d.getString("name",
+                                            delta > 0 ? "&aNext ▶" : "&c◀ Back") : "&aPage",
+                                    d != null ? d.getInt("custom_model_data",0)   : 0);
+
+                            for (int s : slots) {
+                                gui.setItem(s, icon);
+                                slotTypes.put(s, SlotType.BUTTON);
+
+                                // ensure positive offsets get a '+' prefix
+                                String signed = (delta > 0 ? "+" : "") + delta;
+                                buttonLogics.put(s, "page:" + signed);
+
+                                if (permLine != null) permMap.put(s, permLine);
+                            }
+                            continue;  // skip normal button logic
+                        }
+
 
                         /* ---------- optional output_item parsing (for ActionType.GIVE) ---------- */
                         String outItem = null;
@@ -592,15 +639,22 @@ public class GuiBuilder {
         String guiKey = getGuiKeyByInventory(player, inv);
         if (guiKey == null) return;
 
-        Map<Integer, SlotType> slots = guiSlotTypes.getOrDefault(guiKey, Collections.emptyMap());
+        /* active page for this player-GUI combo */
+        int page = getPage(player.getUniqueId(), guiKey);
+
+        Map<Integer, SlotType> slots    = guiSlotTypes.getOrDefault(guiKey, Collections.emptyMap());
         Map<Integer, ItemStack> storage = storageManager.getOrCreateStorage(player.getUniqueId(), guiKey);
 
-        for (Map.Entry<Integer, SlotType> entry : slots.entrySet()) {
+        /* save each STORAGE_SLOT under its virtual index (page × stride + localSlot) */
+        for (var entry : slots.entrySet()) {
             if (entry.getValue() != SlotType.STORAGE_SLOT) continue;
-            int slot = entry.getKey();
-            ItemStack item = inv.getItem(slot);
-            if (item == null || item.getType() == Material.AIR) storage.remove(slot);
-            else storage.put(slot, item.clone());
+
+            int local   = entry.getKey();
+            int virtual = page * PAGE_STRIDE + local;          // page-scoped key
+            ItemStack it = inv.getItem(local);
+
+            if (it == null || it.getType() == Material.AIR) storage.remove(virtual);
+            else storage.put(virtual, it.clone());
         }
 
         storageManager.savePlayerStorage(player.getUniqueId());
