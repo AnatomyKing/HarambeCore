@@ -1,3 +1,4 @@
+// HarambeCore.java
 package net.anatomyworld.harambeCore;
 
 import net.anatomyworld.harambeCore.config.YamlConfigLoader;
@@ -38,7 +39,6 @@ public final class HarambeCore extends JavaPlugin {
     private RewardGroupModule  rewardGroupModule;
     private YLevelTeleportHandler yLevelTeleportHandler;
 
-
     @Override
     public void onEnable() {
         logger.info("§aHarambeCore starting…");
@@ -50,7 +50,7 @@ public final class HarambeCore extends JavaPlugin {
             return;
         }
 
-        //  Config + util folder
+        // Config + util folder
         saveDefaultConfig();
         new File(getDataFolder(), "util").mkdirs();
 
@@ -71,8 +71,6 @@ public final class HarambeCore extends JavaPlugin {
         yLevelTeleportHandler = new YLevelTeleportHandler(this);
         getServer().getPluginManager().registerEvents(yLevelTeleportHandler, this);
 
-
-
         // Registries & storage
         itemRegistry   = new MythicMobsRegistry();
         storageManager = new StorageManager(this);
@@ -80,13 +78,10 @@ public final class HarambeCore extends JavaPlugin {
         // Build GUI
         guiBuilder = new GuiBuilder(this, getConfig(), itemRegistry, storageManager);
 
-        //  Load other util modules
+        // Load other util modules
         poisonModule      = new PoisonModule(this);
         recipeBookModule  = new RecipeBookModule(this, guiBuilder);
-
         rewardGroupModule = new RewardGroupModule(this);
-
-
 
         poisonModule.enable();
         recipeBookModule.enable();
@@ -99,13 +94,14 @@ public final class HarambeCore extends JavaPlugin {
                 playerData
         );
 
-        //  Commands & GUI listener
+        // Commands & GUI listener
         commandHandler = new CommandHandler(
                 this,
                 guiBuilder,
                 rewardHandler,
                 rewardGroupModule.getManager(),
-                itemRegistry
+                itemRegistry,
+                dialogueModule
         );
         commandHandler.registerCommands();
 

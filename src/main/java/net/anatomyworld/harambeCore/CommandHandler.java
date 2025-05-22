@@ -2,6 +2,8 @@ package net.anatomyworld.harambeCore;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import net.anatomyworld.harambeCore.dialogue.DialogueManager;
+import net.anatomyworld.harambeCore.dialogue.DialogueModule;
 import net.anatomyworld.harambeCore.item.ItemRegistry;
 import net.anatomyworld.harambeCore.rewards.RewardHandler;
 import net.anatomyworld.harambeCore.rewards.RewardGroupManager;
@@ -18,16 +20,20 @@ public class CommandHandler {
     private final RewardHandler rewardHandler;
     private final RewardGroupManager rewardGroupManager;
     private final ItemRegistry itemRegistry;
+    private final DialogueModule dialogueModule;
 
-    public CommandHandler(HarambeCore plugin, GuiBuilder guiBuilder,
+    public CommandHandler(HarambeCore plugin,
+                          GuiBuilder guiBuilder,
                           RewardHandler rewardHandler,
                           RewardGroupManager rewardGroupManager,
-                          ItemRegistry itemRegistry) {
+                          ItemRegistry itemRegistry,
+                          DialogueModule dialogueModule) {
         this.plugin = plugin;
         this.guiBuilder = guiBuilder;
         this.rewardHandler = rewardHandler;
         this.rewardGroupManager = rewardGroupManager;
         this.itemRegistry = itemRegistry;
+        this.dialogueModule = dialogueModule;
     }
 
     public void registerCommands() {
@@ -35,6 +41,30 @@ public class CommandHandler {
                 .getServer()
                 .getCommands()
                 .getDispatcher();
+
+        dispatcher.register(
+                Commands.literal("anyphone")
+                        .then(Commands.literal("info")
+                                .then(Commands.argument("key", StringArgumentType.word())
+                                        .executes(ctx -> {
+                                            var sender = ctx.getSource().getBukkitSender();
+                                            if (!(sender instanceof Player player)) {
+                                                sender.sendMessage("§cOnly players can use this command.");
+                                                return 0;
+                                            }
+                                            String key = StringArgumentType.getString(ctx, "key");
+                                            var pages = dialogueModule.getPages(key);
+                                            if (pages == null || pages.isEmpty()) {
+                                                player.sendMessage("§cNo dialogue found for key '" + key + "'.");
+                                                return 0;
+                                            }
+                                            // Show boss bar dialogue without marking 'seen'
+                                            DialogueManager.startDialogue(player, pages, dialogueModule.getTickDelay());
+                                            return 1;
+                                        })
+                                )
+                        )
+        );
 
         // Core /harambe command tree
         dispatcher.register(
