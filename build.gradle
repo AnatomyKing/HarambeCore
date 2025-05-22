@@ -18,9 +18,12 @@ repositories {
 dependencies {
     paperweight.paperDevBundle('1.21.3-R0.1-SNAPSHOT')
 
-    // Force specific Adventure API version
+
     compileOnly 'net.kyori:adventure-api:4.17.0'
     compileOnly 'net.william278.huskhomes:huskhomes-bukkit:4.9.5'
+
+    
+    compileOnly 'net.luckperms:api:5.4'
 
     compileOnly name: 'Vault'
     compileOnly name: 'MythicMobsPremium-5.9.0-SNAPSHOT'
@@ -56,3 +59,4 @@ jar {
 tasks.named('runServer') {
     minecraftVersion('1.21.3')
 }
+

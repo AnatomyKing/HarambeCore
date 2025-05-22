@@ -1,3 +1,4 @@
+// DialogueListeners.java
 package net.anatomyworld.harambeCore.dialogue;
 
 import io.lumine.mythic.api.items.ItemManager;
@@ -25,27 +26,26 @@ public class DialogueListeners implements Listener {
     public void onPickup(EntityPickupItemEvent event) {
         if (!(event.getEntity() instanceof Player player)) return;
         ItemStack stack = event.getItem().getItemStack();
-
         if (!mythic.isMythicItem(stack)) return;
+
         String key = mythic.getMythicTypeFromItem(stack);
         List<List<String>> pages = module.getPages(key);
         if (pages == null) return;
 
-        if (!DialogueManager.isDialogueActive(player)) {
+        if (!LuckPermsDialogueUtil.hasSeenDialogue(player, key)) {
             DialogueManager.startDialogue(player, pages, module.getTickDelay());
+            LuckPermsDialogueUtil.markDialogueSeen(player, key);
         }
     }
 
     @EventHandler(priority = EventPriority.NORMAL)
     public void onSwap(PlayerSwapHandItemsEvent event) {
         Player player = event.getPlayer();
-
         if (!DialogueManager.isDialogueActive(player)) return;
 
-        event.setCancelled(true); // Block F key while dialogue is running
-
+        event.setCancelled(true);
         if (DialogueManager.isLooping(player)) {
-            DialogueManager.nextLine(player); // Go to next page when loop is done
+            DialogueManager.nextLine(player);
         }
     }
 }
