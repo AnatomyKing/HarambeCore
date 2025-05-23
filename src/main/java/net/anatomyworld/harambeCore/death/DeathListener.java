@@ -19,15 +19,19 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Saves death-drops into “death-&lt;victimUuid&gt;” reward group
- * and drops a PAPER that stores the owner UUID.
+ * Saves drops into “death-&lt;group&gt;-&lt;victimUuid&gt;”
+ * and drops a PAPER key storing owner + group.
  */
 public final class DeathListener implements Listener {
 
-    private final JavaPlugin plugin;
-    private final RewardHandler rewards;
-    private static final NamespacedKey KEY =
+    /* ─── PersistentData keys ───────────────────────────────────── */
+    private static final NamespacedKey KEY_OWNER =
             new NamespacedKey("harambe", "death_owner");
+    private static final NamespacedKey KEY_GROUP =
+            new NamespacedKey("harambe", "death_group");
+
+    private final JavaPlugin   plugin;
+    private final RewardHandler rewards;
 
     public DeathListener(JavaPlugin plugin, RewardHandler rewards) {
         this.plugin  = plugin;
@@ -35,54 +39,65 @@ public final class DeathListener implements Listener {
         Bukkit.getPluginManager().registerEvents(this, plugin);
     }
 
-    /* ------------------------------------------------------------------ */
-    /*  Public helper - parse a death-key                                 */
-    /* ------------------------------------------------------------------ */
+    /* ───────────────────────── Public helpers ──────────────────── */
 
-    public static UUID getOwner(ItemStack stack) {
+    /** Parsed contents of a death key */
+    public record KeyInfo(UUID owner, String group) {}
+
+    /** @return info if valid paper key, else null */
+    public static KeyInfo readKey(ItemStack stack) {
         if (stack == null || stack.getType() != Material.PAPER) return null;
-        ItemMeta meta = stack.getItemMeta();
-        if (meta == null) return null;
+        ItemMeta meta = stack.getItemMeta();  if (meta == null) return null;
 
-        String raw = meta.getPersistentDataContainer()
-                .get(KEY, PersistentDataType.STRING);
-        try { return raw == null ? null : UUID.fromString(raw); }
+        String rawOwner = meta.getPersistentDataContainer()
+                .get(KEY_OWNER,  PersistentDataType.STRING);
+        String rawGroup = meta.getPersistentDataContainer()
+                .get(KEY_GROUP,  PersistentDataType.STRING);
+        if (rawOwner == null || rawGroup == null) return null;
+
+        try { return new KeyInfo(UUID.fromString(rawOwner), rawGroup); }
         catch (IllegalArgumentException ex) { return null; }
     }
 
-    /* ------------------------------------------------------------------ */
-    /*  Event - on death                                                  */
-    /* ------------------------------------------------------------------ */
+    /* ───────────────────────── Event hook ───────────────────────── */
 
     @EventHandler
     public void onPlayerDeath(PlayerDeathEvent e) {
         Player victim = e.getEntity();
-        UUID    vid   = victim.getUniqueId();
-        String  group = "death-" + vid;
+        UUID   vid    = victim.getUniqueId();
 
-        /* 1) stash every vanilla drop into the victim’s personal group */
-        for (ItemStack drop : List.copyOf(e.getDrops())) {
-            rewards.playerData().addStackReward(vid, group, drop);
-        }
-        e.getDrops().clear();   // nothing falls except key
+        /* Which Multiverse-Inventories group did this death happen in? */
+        String mvGroup = WorldGroupHelper.getGroupName(victim.getWorld());
 
-        /* 2) drop the key */
+        /* Reward-group is now scoped by world-group *and* victim */
+        String rewardGroup = "death-" + mvGroup + "-" + vid;
+
+        List<ItemStack> drops = List.copyOf(e.getDrops());
+        if (drops.isEmpty()) return;           // nothing to save
+
+        drops.forEach(d -> rewards.playerData()
+                .addStackReward(vid, rewardGroup, d));
+        e.getDrops().clear();                  // suppress vanilla drop
+
         victim.getWorld().dropItemNaturally(
-                victim.getLocation(), createKey(victim));
+                victim.getLocation(),
+                createKey(victim, mvGroup));
     }
 
-    /* ------------------------------------------------------------------ */
-    /*  Helper - craft the key                                            */
-    /* ------------------------------------------------------------------ */
+    /* ───────────────────────── Internals ───────────────────────── */
 
-    private ItemStack createKey(Player owner) {
+    private ItemStack createKey(Player owner, String mvGroup) {
         ItemStack paper = new ItemStack(Material.PAPER);
         ItemMeta  meta  = paper.getItemMeta();
 
-        meta.displayName(Component.text("Death Key ▶ " + owner.getName(),
+        meta.displayName(Component.text(
+                "Death Key ▶ " + owner.getName() + " [" + mvGroup + ']',
                 NamedTextColor.RED));
-        meta.getPersistentDataContainer()
-                .set(KEY, PersistentDataType.STRING, owner.getUniqueId().toString());
+
+        meta.getPersistentDataContainer().set(KEY_OWNER,
+                PersistentDataType.STRING, owner.getUniqueId().toString());
+        meta.getPersistentDataContainer().set(KEY_GROUP,
+                PersistentDataType.STRING, mvGroup);
 
         paper.setItemMeta(meta);
         return paper;

@@ -8,6 +8,7 @@ import net.anatomyworld.harambeCore.rewards.RewardHandler;
 import net.anatomyworld.harambeCore.util.EconomyHandler;
 import net.anatomyworld.harambeCore.util.recipebook.RecipeBookUtils;
 import org.bukkit.Material;
+import net.anatomyworld.harambeCore.death.DeathListener.KeyInfo;
 import org.bukkit.permissions.PermissionAttachmentInfo;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -297,15 +298,12 @@ public class GuiEventListener implements Listener {
             case CHECK_BUTTON -> {
                 e.setCancelled(true);
 
-                // All INPUT_SLOTs linked to this button (may be null)
-                List<Integer> targets = conn.get(clicked);
+                List<Integer> targets = conn.get(clicked);          // linked INPUT_SLOTs
+                String tag = logicMap.get(clicked);                 // custom tag
 
-                // Custom tag written by GuiBuilder ("DEATH_ITEMS" / etc.)
-                String tag = logicMap.get(clicked);
-
-    /* =====================================================================
-       A.  Custom path — DEATH_ITEMS  (submit / validate death-key)
-       ===================================================================== */
+/* ============================================================
+   A.  Death-key submission / validation (“DEATH_ITEMS”)
+   ============================================================ */
                 if ("DEATH_ITEMS".equalsIgnoreCase(tag)) {
 
                     if (targets == null || targets.isEmpty()) {
@@ -314,121 +312,114 @@ public class GuiEventListener implements Listener {
                     }
 
                     ItemStack keyStack = e.getInventory().getItem(targets.get(0));
-                    UUID owner = DeathListener.getOwner(keyStack);
-                    if (owner == null) {
-                        p.sendMessage("§cInvalid death key.");
+                    KeyInfo info = DeathListener.readKey(keyStack);
+                    if (info == null) {                     // invalid or wrong item
+                        p.sendMessage("§cInvalid death key."); return;
+                    }
+
+                    /* ✦ NEW ✦  do not allow redemption in a different MV-Inv group */
+                    if (!isInMvGroup(p, info.group())) {
+                        p.sendMessage("§cThis death key belongs to another world-group.");
                         return;
                     }
 
-                    String deathGroup = "death-" + owner;
+                    /* death-<mvGroup>-<ownerUuid> */
+                    String deathGroup = "death-" + info.group() + "-" + info.owner();
 
-                    // 1) Write into the GuiBuilder’s global cache so future clicks/openings see it
-                    Map<Integer, String> globalGroups = guiBuilder.getRewardGroups(guiKey);
+                    /* 1. remember mapping so OUTPUT_SLOTs know what to show */
+                    Map<Integer,String> globalGroups = guiBuilder.getRewardGroups(guiKey);
 
-                    // 2) Also patch your local map for the immediate repaint
-                    for (Map.Entry<Integer, SlotType> entry : slotTypes.entrySet()) {
+                    for (Map.Entry<Integer,SlotType> entry : slotTypes.entrySet()) {
                         int slot = entry.getKey();
                         if (entry.getValue() == SlotType.OUTPUT_SLOT &&
                                 "DEATH_GET".equalsIgnoreCase(logicMap.get(slot))) {
                             globalGroups.put(slot, deathGroup);
-                            groupMap.   put(slot, deathGroup);
+                            groupMap.put(slot, deathGroup);
                         }
                     }
 
-                    // 3) Re-paint the GUI so the loot appears immediately
-                    paintRetrieval(
-                            e.getInventory(),
+                    /* 2. repaint loot immediately */
+                    paintRetrieval(e.getInventory(),
                             slotTypes,
                             groupMap,
                             deathGroup,
-                            rewardHandler.playerData().getAllRewards(owner, deathGroup)
-                    );
+                            rewardHandler.playerData()
+                                    .getAllRewards(info.owner(), deathGroup));
 
-                    // 4) Consume one key
+                    /* 3. consume one key */
                     keyStack.setAmount(keyStack.getAmount() - 1);
                     if (keyStack.getAmount() <= 0) {
                         e.getInventory().setItem(targets.get(0), null);
                     }
-
-                    return;   // ✅ stop here – skip the normal reward-group flow
+                    return;    // ✔ done – skip normal flow
                 }
 
-    /* =====================================================================
-       B.  Normal reward-group CHECK_BUTTON logic (unchanged behaviour)
-       ===================================================================== */
-
+/* ============================================================
+   B.  Normal reward-group CHECK_BUTTON logic (unchanged)
+   ============================================================ */
                 if (targets == null || targets.isEmpty()) {
-                    p.sendMessage("§cNothing to check.");
-                    return;
+                    p.sendMessage("§cNothing to check."); return;
                 }
-
                 String group = checkItems.get(clicked);
                 if (group == null) {
-                    p.sendMessage("§cNo reward group configured.");
-                    return;
+                    p.sendMessage("§cNo reward group configured."); return;
                 }
 
                 boolean copyFlag = copyMap.getOrDefault(clicked, false);
 
-                // validate items (unless copy_item: true)
+                /* validate items (unless copy_item:true) */
                 boolean valid = true;
                 if (!copyFlag) {
                     for (int s : targets) {
                         ItemStack it = e.getInventory().getItem(s);
                         if (it == null) { valid = false; break; }
-                        var entry = rewardHandler.groupMgr().getEntryForItem(resolveKey(it));
+                        var entry = rewardHandler.groupMgr()
+                                .getEntryForItem(resolveKey(it));
                         if (entry == null || !entry.groupName().equals(group)) {
                             valid = false; break;
                         }
                     }
                 }
-                if (!valid) {
-                    p.sendMessage("§cInvalid item(s) or wrong group.");
-                    return;
-                }
+                if (!valid) { p.sendMessage("§cInvalid item(s) or wrong group."); return; }
 
-                // fee handling
+                /* ----- fee handling ----- */
                 double fee = costs.getOrDefault(clicked, 0.0);
                 if (fee > 0) {
                     if (costPay.getOrDefault(clicked, false))
                         EconomyHandler.depositBalance(p, fee);
                     else if (!EconomyHandler.withdrawBalance(p, fee)) {
-                        p.sendMessage("§cYou need " + fee);
-                        return;
+                        p.sendMessage("§cYou need " + fee); return;
                     }
                 }
 
-                // queue / copy / consume items
+                /* ----- queue / copy / consume ----- */
                 for (int s : targets) {
                     ItemStack it = e.getInventory().getItem(s);
                     if (it != null) rewardHandler.queueReward(p.getUniqueId(), it);
                     if (copyFlag && it != null)
-                        rewardHandler.playerData().addStackReward(p.getUniqueId(), group, it);
+                        rewardHandler.playerData()
+                                .addStackReward(p.getUniqueId(), group, it);
 
-                    if (actions.getOrDefault(s, InputActionType.NONE) == InputActionType.CONSUME) {
-                        int rem;
-                        if (perStack.getOrDefault(s, false)) {
-                            assert it != null;
-                            rem = it.getAmount();
-                        } else {
-                            rem = 1;
-                        }
-                        assert it != null;
-                        int left = it.getAmount() - rem;
+                    if (actions.getOrDefault(s,InputActionType.NONE) == InputActionType.CONSUME) {
+                        int rem = perStack.getOrDefault(s,false)
+                                ? Objects.requireNonNull(it).getAmount()
+                                : 1;
+                        int left = Objects.requireNonNull(it).getAmount() - rem;
                         if (left > 0) it.setAmount(left);
                         else          e.getInventory().setItem(s, null);
                     }
                 }
 
                 guiBuilder.handleButtonClick(p, guiKey, clicked);
-                paintRetrieval(
-                        e.getInventory(),
+
+                paintRetrieval(e.getInventory(),
                         slotTypes,
                         groupMap,
                         group,
-                        rewardHandler.playerData().getAllRewards(p.getUniqueId(), group)
-                );
+                        rewardHandler.playerData()
+                                .getAllRewards(p.getUniqueId(), group));
             }
+
 
 
             /* ---------------- OUTPUT_SLOT ---------- */
@@ -436,19 +427,31 @@ public class GuiEventListener implements Listener {
                 e.setCancelled(true);
 
                 String group = groupMap.get(clicked);   // may be null
-                String logic = logicMap.get(clicked);   // DEATH_GET, etc.
+                String logic = logicMap.get(clicked);   // e.g. DEATH_GET
 
-    /* ──────────────────────────────────────────────────────
-       A.  Death-chest retrieval  (logic == DEATH_GET)
-       ────────────────────────────────────────────────────── */
+/* ────────────────────────────────────────────────
+   A.  Death-chest retrieval      (logic == DEATH_GET)
+   ──────────────────────────────────────────────── */
                 if ("DEATH_GET".equalsIgnoreCase(logic)) {
                     if (group == null || !group.startsWith("death-")) {
                         p.sendMessage("§cNo death chest loaded."); return;
                     }
 
-                    UUID victim = UUID.fromString(group.substring("death-".length()));
+                    /* format: death-<mvGroup>-<victimUuid> */
+                    String[] parts = group.split("-", 3);
+                    if (parts.length < 3) {              // malformed cache entry
+                        p.sendMessage("§cCorrupted chest reference."); return;
+                    }
 
-                    // 1) concrete ItemStacks
+                    String mvGroup = parts[1];
+                    if (!isInMvGroup(p, mvGroup)) {      // ✦ NEW guard ✦
+                        p.sendMessage("§cYou must be in that world-group to loot this chest.");
+                        return;
+                    }
+
+                    UUID victim = UUID.fromString(parts[2]);
+
+                    /* 1) concrete ItemStacks first */
                     List<ItemStack> queue =
                             rewardHandler.playerData().getStackRewards(victim, group);
 
@@ -461,17 +464,15 @@ public class GuiEventListener implements Listener {
                                 rewardHandler.playerData().getAllRewards(victim, group));
                         return;
                     }
-
-                    p.sendMessage("§cChest is empty.");
-                    return;
+                    p.sendMessage("§cChest is empty."); return;
                 }
 
-    /* ──────────────────────────────────────────────────────
-       B.  Normal reward OUTPUT_SLOT logic (unchanged)
-       ────────────────────────────────────────────────────── */
+/* ────────────────────────────────────────────────
+   B.  Normal reward OUTPUT_SLOT logic (unchanged)
+   ──────────────────────────────────────────────── */
                 if (group == null) { p.sendMessage("§cNo rewards."); return; }
 
-                // 1) viewer’s queued stacks
+                /* 1) queued concrete stacks */
                 List<ItemStack> stackRewards =
                         rewardHandler.playerData().getStackRewards(p.getUniqueId(), group);
 
@@ -485,8 +486,8 @@ public class GuiEventListener implements Listener {
                     return;
                 }
 
-                // 2) classic id→item rewards
-                List<Integer> outs     = outputSlotsForGroup(slotTypes, groupMap, group);
+                /* 2) id→item rewards */
+                List<Integer> outs = outputSlotsForGroup(slotTypes, groupMap, group);
                 Map<String,Integer> map =
                         rewardHandler.playerData().getAllRewards(p.getUniqueId(), group);
 
@@ -494,9 +495,8 @@ public class GuiEventListener implements Listener {
 
                 List<String> keys = new ArrayList<>(map.keySet());
                 int idx = outs.indexOf(clicked);
-                if (idx < 0 || idx >= keys.size()) {      // clicked an empty cell
-                    e.getInventory().setItem(clicked, null);
-                    return;
+                if (idx < 0 || idx >= keys.size()) {           // clicked empty cell
+                    e.getInventory().setItem(clicked, null); return;
                 }
 
                 String id  = keys.get(idx);
@@ -536,16 +536,43 @@ public class GuiEventListener implements Listener {
                                 String group,
                                 Map<String, Integer> rewards) {
 
-        // ----- whose reward data are we showing? -----
-        UUID dataUuid = group.startsWith("death-")
-                ? UUID.fromString(group.substring("death-".length()))
-                : (inv.getViewers().isEmpty()
-                ? new UUID(0, 0)
-                : inv.getViewers().get(0).getUniqueId());
+    /* ─────────────────────────────────────────────────────────────
+       Whose reward data are we showing?
+
+       • Normal groups   → viewer’s own UUID
+       • Death-chest key → victim UUID, which may be encoded as
+                           "death-<uuid>"             (old format)  or
+                           "death-<mvGroup>-<uuid>"   (new format)
+    ───────────────────────────────────────────────────────────── */
+        UUID dataUuid;
+        if (group != null && group.startsWith("death-")) {
+            String tail = group.substring("death-".length());   // anything after "death-"
+
+        /* new format:  mvGroup may itself contain dashes, so
+           take *last* dash and everything after it as UUID    */
+            int lastDash = tail.lastIndexOf('-');
+            if (lastDash >= 0) {
+                tail = tail.substring(lastDash + 1);
+            }
+
+            try {
+                dataUuid = UUID.fromString(tail);
+            } catch (IllegalArgumentException ex) {   // corrupted string → fallback
+                dataUuid = inv.getViewers().isEmpty()
+                        ? new UUID(0, 0)
+                        : inv.getViewers().get(0).getUniqueId();
+            }
+        } else {
+            dataUuid = inv.getViewers().isEmpty()
+                    ? new UUID(0, 0)
+                    : inv.getViewers().get(0).getUniqueId();
+        }
+
+        /* ------------------------------------------------------------------ */
 
         List<Integer> outs = outputSlotsForGroup(slotTypes, groupMap, group);
 
-        /* 1) stack-queue (concrete ItemStacks) */
+        /* 1) stack-queue (concrete ItemStacks) ------------------------------ */
         List<ItemStack> stackRewards =
                 rewardHandler.playerData().getStackRewards(dataUuid, group);
 
@@ -554,25 +581,39 @@ public class GuiEventListener implements Listener {
             inv.setItem(outs.get(pos), stackRewards.get(pos));
         }
 
-        /* 2) id→item reward queue (classic rewards) */
+        /* 2) id→item reward queue (classic rewards) ------------------------ */
         List<String> ids = new ArrayList<>(rewards.keySet());
         for (int i = 0; pos < outs.size(); pos++, i++) {
             int slot = outs.get(pos);
 
             if (i >= ids.size()) {                 // clear leftover cells
-                inv.setItem(slot, null); continue;
+                inv.setItem(slot, null);
+                continue;
             }
 
             String id  = ids.get(i);
             int    qty = rewards.get(id);
 
             ItemStack proto = itemRegistry.getItem(id);
-            if (proto == null) { inv.setItem(slot, null); continue; }
+            if (proto == null) {
+                inv.setItem(slot, null);
+                continue;
+            }
 
             ItemStack stack = proto.clone();
             stack.setAmount(Math.min(qty, stack.getMaxStackSize()));
             inv.setItem(slot, stack);
         }
+    }
+
+
+    private boolean isInMvGroup(Player p, String groupName) {
+        var mgr = com.onarandombox.multiverseinventories.MultiverseInventories
+                .getPlugin().getGroupManager();
+
+        return mgr.getGroupsForWorld(p.getWorld().getName())
+                .stream()
+                .anyMatch(g -> g.getName().equalsIgnoreCase(groupName));
     }
 
     private List<Integer> outputSlotsForGroup(Map<Integer, SlotType> slotTypes,

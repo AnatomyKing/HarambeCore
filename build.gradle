@@ -28,6 +28,8 @@ dependencies {
     compileOnly name: 'Vault'
     compileOnly name: 'MythicMobsPremium-5.9.0-SNAPSHOT'
     compileOnly name: 'ProtocolLib'
+    compileOnly name: 'multiverse-inventories-4.2.8'
+    compileOnly name: 'multiverse-core-4.3.14'
 }
 
 configurations.configureEach {
