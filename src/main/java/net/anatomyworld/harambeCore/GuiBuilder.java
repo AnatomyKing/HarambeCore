@@ -2,7 +2,6 @@ package net.anatomyworld.harambeCore;
 
 import net.anatomyworld.harambeCore.storage.StorageManager;
 import net.anatomyworld.harambeCore.item.ItemRegistry;
-import net.anatomyworld.harambeCore.util.PermBypassSender;
 import net.anatomyworld.harambeCore.util.RandomGibberishNameGenerator;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -20,6 +19,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Locale;
 
 import java.util.*;
 
@@ -589,27 +589,40 @@ public class GuiBuilder {
     /* --------------- button logic dispatcher ------------------- */
 
     public void handleButtonClick(Player player, String guiKey, int slot) {
-        Map<Integer, String>  logics  = buttonLogicCache.getOrDefault(guiKey, Collections.emptyMap());
-        Map<Integer, String>  outputs = guiOutputItems.getOrDefault(guiKey, Collections.emptyMap());
-        Map<Integer, Integer> pays    = guiPayoutAmounts.getOrDefault(guiKey, Collections.emptyMap());
+        Map<Integer, String> logics  = buttonLogicCache.getOrDefault(guiKey, Collections.emptyMap());
+        Map<Integer, String> outputs = guiOutputItems.getOrDefault(guiKey, Collections.emptyMap());
+        Map<Integer, Integer> pays   = guiPayoutAmounts.getOrDefault(guiKey, Collections.emptyMap());
 
-        /* ── 1.  COMMAND / TELEPORT logic ───────────────────────── */
+        /* ── 1. COMMAND / TELEPORT / GUI / NOPERM logic ───────────── */
         if (logics.containsKey(slot)) {
-            String cmdLine = logics.get(slot).replace("%player%", player.getName());
+            String cmdLine = logics.get(slot)
+                    .replace("%player%", player.getName())
+                    .trim();
 
-            // HuskHomes teleport shortcut
+            /* ── open another GUI:  gui:<key> ───────────────────────── */
+            if (cmdLine.toLowerCase(Locale.ROOT).startsWith("gui:")) {
+                String key = cmdLine.substring("gui:".length()).trim();
+                createAndOpenGui(key, player);
+                return;
+            }
+
+            /* ── run command as CONSOLE, skipping perms:  noperm: ──── */
+            if (cmdLine.toLowerCase(Locale.ROOT).startsWith("noperm:")) {
+                String consoleCmd = cmdLine.substring("noperm:".length()).trim();
+                if (consoleCmd.startsWith("/")) consoleCmd = consoleCmd.substring(1);
+                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), consoleCmd);
+                return;
+            }
+
+            /* ── HuskHomes shortcuts (unchanged) ───────────────────── */
             if (cmdLine.startsWith("huskhomes:tp:")) {
-                String     homeName = cmdLine.substring("huskhomes:tp:".length());
-                OnlineUser user     = HuskHomesAPI.getInstance().adaptUser(player);
+                String homeName = cmdLine.substring("huskhomes:tp:".length());
+                OnlineUser user = HuskHomesAPI.getInstance().adaptUser(player);
 
                 HuskHomesAPI.getInstance().getHome(user, homeName).thenAccept(opt ->
                         opt.ifPresent(home -> HuskHomesAPI.getInstance().teleportBuilder()
-                                .teleporter(user)
-                                .target(home)
-                                .buildAndComplete(true)   // instant teleport
-                        )
-                );
-                return;   // done
+                                .teleporter(user).target(home).buildAndComplete(true)));
+                return;
             }
 
             if ("huskhomes:create".equals(cmdLine)) {
@@ -627,17 +640,11 @@ public class GuiBuilder {
                         .createHome(user, name,
                                 HuskHomesAPI.getInstance().adaptPosition(player.getLocation()))
                         .thenAccept(home -> Bukkit.getScheduler().runTask(plugin, () -> {
-
-                            // 1. feedback
                             player.sendMessage("§aCreated home §e" + name);
-
-                            // 2. rebuild the GUI *synchronously* so every slot & click-logic is fresh
                             int page = getPage(player.getUniqueId(), guiKey);
                             Inventory fresh = generateGui(guiKey, player.getUniqueId(), page);
                             playerGuis.get(player.getUniqueId()).put(guiKey, fresh);
                             player.openInventory(fresh);
-
-                            // 3. (optional) tiny sound or particles here if you like
                         }))
                         .exceptionally(ex -> {
                             Bukkit.getScheduler().runTask(plugin,
@@ -648,76 +655,57 @@ public class GuiBuilder {
                 return;
             }
 
-            // ── DELETE a home ─────────────────────────────────────────────
             if (cmdLine.startsWith("huskhomes:del:")) {
-                String     homeName = cmdLine.substring("huskhomes:del:".length());
-                OnlineUser user     = HuskHomesAPI.getInstance().adaptUser(player);
+                String homeName = cmdLine.substring("huskhomes:del:".length());
+                OnlineUser user = HuskHomesAPI.getInstance().adaptUser(player);
 
-                // 1. ask HuskHomes to delete the home (it will run async internally)
                 HuskHomesAPI.getInstance().deleteHome(user, homeName);
-
-                // 2. tell the player right away
                 player.sendMessage("§cDeleted home §e" + homeName);
 
-                // 3. repaint ~0.25 s later (5 ticks) – plenty of time for the cache to update
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    // make sure the player is still viewing the same GUI
-                    player.getOpenInventory();
                     if (player.getOpenInventory().getTopInventory().equals(
-                    playerGuis.get(player.getUniqueId()).get(guiKey))) {
-
+                            playerGuis.get(player.getUniqueId()).get(guiKey))) {
                         populateHuskHomeButtons(guiKey,
-                                player.getOpenInventory().getTopInventory(), player);
+                                player.getOpenInventory().getTopInventory(),
+                                player);
                     }
-                }, 5L); // 5 ticks = 0.25 s
-
+                }, 5L);
                 return;
             }
+
             if (cmdLine.startsWith("huskhomes:rtp:")) {
                 String worldName = cmdLine.substring("huskhomes:rtp:".length()).trim();
                 if (!worldName.isEmpty()) {
-                    Bukkit.dispatchCommand(
-                            Bukkit.getConsoleSender(),
-                            "rtp " + player.getName() + " " + worldName
-                    );
+                    Bukkit.dispatchCommand(Bukkit.getConsoleSender(),
+                            "rtp " + player.getName() + " " + worldName);
                 }
                 return;
             }
 
-
-
-            // Regular console:/player:/ or bare command
+            /* ── Regular console:/player:/ or bare command ─────────── */
             CommandSender sender;
-
             if (cmdLine.startsWith("console:")) {
                 sender  = Bukkit.getConsoleSender();
-                cmdLine = cmdLine.substring("console:".length()).trim();
+                cmdLine = cmdLine.substring(8);
             } else if (cmdLine.startsWith("player:")) {
                 sender  = player;
-                cmdLine = cmdLine.substring("player:".length()).trim();
-            } else if (cmdLine.startsWith("playernoperm:")) {
-                sender  = new PermBypassSender(player);
-                cmdLine = cmdLine.substring("playernoperm:".length()).trim();
+                cmdLine = cmdLine.substring(7);
             } else {
                 sender = player;
             }
-
-            if (cmdLine.startsWith("/")) {
-                cmdLine = cmdLine.substring(1);
-            }
-
+            if (cmdLine.startsWith("/")) cmdLine = cmdLine.substring(1);
             Bukkit.dispatchCommand(sender, cmdLine.trim());
             return;
         }
 
-        /* ── 2.  GIVE-item logic (MYTHIC or vanilla) ────────────── */
+        /* ── 2. GIVE-item logic (MYTHIC or vanilla) ────────────────── */
         if (outputs.containsKey(slot)) {
             String raw    = outputs.get(slot);
             int    amount = pays.getOrDefault(slot, 1);
 
             if (raw.toUpperCase(Locale.ROOT).startsWith("MYTHIC:")) {
-                String id   = raw.substring("MYTHIC:".length());
-                ItemStack it = itemRegistry.getItem(id);
+                String     id = raw.substring("MYTHIC:".length());
+                ItemStack it  = itemRegistry.getItem(id);
                 if (it != null) {
                     it.setAmount(amount);
                     player.getInventory().addItem(it);
@@ -734,6 +722,7 @@ public class GuiBuilder {
             }
         }
     }
+
 
 
 
