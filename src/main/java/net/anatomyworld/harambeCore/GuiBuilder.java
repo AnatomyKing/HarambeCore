@@ -172,6 +172,11 @@ public class GuiBuilder {
         ConfigurationSection guiSection = config.getConfigurationSection("gui." + guiKey);
         if (guiSection == null) return null;
 
+        huskHomeSlots.put(guiKey,       new ArrayList<>());
+        huskHomeDeleteSlots.put(guiKey, new ArrayList<>());
+        huskHomeCreateSlots.put(guiKey, new ArrayList<>());
+        huskHomeRtpSlots.put(guiKey,    new ArrayList<>());
+
         int maxPages = guiSection.getInt("max_pages", 9999);
         guiMaxPages.put(guiKey, maxPages);
 
@@ -183,6 +188,8 @@ public class GuiBuilder {
         Component titleComponent =
                 LegacyComponentSerializer.legacySection().deserialize(rawTitle);
         Inventory gui = Bukkit.createInventory(null, size, titleComponent);
+
+
 
         Map<Integer, SlotType>        slotTypes       = new HashMap<>();
         Map<Integer, String>          buttonLogics    = new HashMap<>();
@@ -725,6 +732,7 @@ public class GuiBuilder {
         for (Map.Entry<Integer, SlotType> e : slots.entrySet()) {
             if (e.getValue() != SlotType.STORAGE_SLOT) continue;
 
+
             int local   = e.getKey();
             int virtual = virtualIndex(page, local);  // ← helper call
             ItemStack it = inv.getItem(local);
@@ -746,9 +754,13 @@ public class GuiBuilder {
                         .computeIfAbsent(guiKey, k -> new HashMap<>());
 
         for (Map.Entry<Integer, SlotType> e : slots.entrySet()) {
-            if (e.getValue() == SlotType.STORAGE_SLOT) continue;
+            SlotType t = e.getValue();
+
+            if (t == SlotType.STORAGE_SLOT || t == SlotType.HUSKHOME_BUTTON) continue;
+
 
             int local   = e.getKey();
+
             int virtual = virtualIndex(page, local);
             ItemStack it = inv.getItem(local);
 
@@ -811,6 +823,21 @@ public class GuiBuilder {
                                     logicMap.remove(tpSlot);
                                     if (delSlot >= 0) logicMap.remove(delSlot);
                                 }
+
+                                // ── NEW: downgrade the slot to a real filler & remove any cost flags ──
+                                guiSlotTypes.get(guiKey).put(tpSlot, SlotType.FILLER);
+                                guiSlotCosts.get(guiKey).remove(tpSlot);
+                                guiCostPerStack.get(guiKey).remove(tpSlot);
+                                guiCostIsPayout.get(guiKey).remove(tpSlot);
+
+                                if (delSlot >= 0) {
+                                    guiSlotTypes.get(guiKey).put(delSlot, SlotType.FILLER);
+                                    guiSlotCosts.get(guiKey).remove(delSlot);
+                                    guiCostPerStack.get(guiKey).remove(delSlot);
+                                    guiCostIsPayout.get(guiKey).remove(delSlot);
+                                }
+                                // ---------------------------------------------------------------------
+
                                 continue;
                             }
 
