@@ -1,4 +1,3 @@
-// HarambeCore.java
 package net.anatomyworld.harambeCore;
 
 import net.anatomyworld.harambeCore.death.DeathChestManager;
@@ -49,11 +48,10 @@ public final class HarambeCore extends JavaPlugin {
     private DeathChestManager     deathChestManager;
 
     /* ====================================================================== */
-    /*  ENABLE                                                                */
+    /*  ENABLE                                                                 */
     /* ====================================================================== */
     @Override
     public void onEnable() {
-
         logger.info("§aHarambeCore starting…");
 
         /* economy check ---------------------------------------------------- */
@@ -113,7 +111,8 @@ public final class HarambeCore extends JavaPlugin {
                 rewardHandler,
                 rewardGroupModule.getManager(),
                 itemRegistry,
-                dialogueModule
+                dialogueModule,
+                deathChestModule            // ← added here
         );
         commandHandler.registerCommands();
 
@@ -143,7 +142,6 @@ public final class HarambeCore extends JavaPlugin {
     /*  /harambecore reload                                                   */
     /* ====================================================================== */
     public void reloadPlugin() {
-
         reloadConfig();
         guiBuilder.updateConfig(getConfig());
         commandHandler.registerCommands();          // pick up changes

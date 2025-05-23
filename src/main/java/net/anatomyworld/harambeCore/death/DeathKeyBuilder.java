@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.UUID;
 
 /** Static helper – creates a paper Death Key exactly as YAML defines it. */
-final class DeathKeyBuilder {
+public final class DeathKeyBuilder {
 
     private DeathKeyBuilder() {}
 

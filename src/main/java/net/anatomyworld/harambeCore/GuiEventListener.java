@@ -566,13 +566,11 @@ public class GuiEventListener implements Listener {
         /* ───── determine whose rewards we’re showing (viewer or victim) ───── */
         UUID dataUuid;
         if (group != null && group.startsWith("death-")) {
-            String tail = group.substring("death-".length());      // strip prefix
-
-            int lastDash = tail.lastIndexOf('-');                  // new-format fix
-            if (lastDash >= 0) tail = tail.substring(lastDash + 1);
-
-            try { dataUuid = UUID.fromString(tail); }
-            catch (IllegalArgumentException ex) {                  // corruption fallback
+            try {
+                // Extract full UUID from the end of the group string (always 36 characters)
+                String uuidStr = group.substring(group.length() - 36);
+                dataUuid = UUID.fromString(uuidStr);
+            } catch (IllegalArgumentException ex) {
                 dataUuid = inv.getViewers().isEmpty()
                         ? new UUID(0, 0)
                         : inv.getViewers().get(0).getUniqueId();
@@ -607,19 +605,26 @@ public class GuiEventListener implements Listener {
         for (int i = 0; pos < outs.size(); pos++, i++) {
             int slot = outs.get(pos);
 
-            if (i >= ids.size()) { inv.setItem(slot, null); continue; }
+            if (i >= ids.size()) {
+                inv.setItem(slot, null);
+                continue;
+            }
 
             String id  = ids.get(i);
             int    qty = rewards.get(id);
 
             ItemStack proto = itemRegistry.getItem(id);
-            if (proto == null) { inv.setItem(slot, null); continue; }
+            if (proto == null) {
+                inv.setItem(slot, null);
+                continue;
+            }
 
             ItemStack stack = proto.clone();
             stack.setAmount(Math.min(qty, stack.getMaxStackSize()));
             inv.setItem(slot, stack);
         }
     }
+
 
 
     private boolean isInMvGroup(Player p, String groupName) {
