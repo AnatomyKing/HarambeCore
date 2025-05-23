@@ -7,7 +7,6 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.william278.huskhomes.api.HuskHomesAPI;
 import net.william278.huskhomes.position.Home;
-import net.william278.huskhomes.random.RandomTeleportProvider;
 import net.william278.huskhomes.user.OnlineUser;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -30,34 +29,36 @@ public class GuiBuilder {
     public enum InputActionType {NONE, CONSUME}
 
     /* ---------------- cached data maps ---------------- */
-    final Map<UUID, Map<String, Inventory>> playerGuis              = new HashMap<>();
-    private final Map<String, Map<Integer, SlotType>>    guiSlotTypes       = new HashMap<>();
-    private final Map<String, Map<Integer, String>>     buttonLogicCache    = new HashMap<>();
-    private final Map<String, Map<Integer, Double>>     guiSlotCosts        = new HashMap<>();
-    private final Map<String, Map<Integer, Boolean>>    guiCostPerStack     = new HashMap<>();
-    private final Map<String, Map<Integer, Boolean>>    guiCostIsPayout     = new HashMap<>();
-    private final Map<String, Map<Integer, String>>     guiAcceptedItems    = new HashMap<>();
-    private final Map<String, Map<Integer, Integer>>    guiAcceptedAmounts  = new HashMap<>();
-    private final Map<String, Map<Integer, String>>     guiOutputItems      = new HashMap<>();
-    private final Map<String, Map<Integer, Integer>>    guiPayoutAmounts    = new HashMap<>();
-    private final Map<String, Map<Integer, InputActionType>> guiInputActions  = new HashMap<>();
-    private final Map<String, Map<Integer, List<Integer>>>   guiSlotConnections = new HashMap<>();
-    private final Map<String, Map<Integer, Integer>>         guiReverseConnections = new HashMap<>();
-    private final Map<String, Map<Integer, String>> guiCheckItems   = new HashMap<>();
-    private final Map<String, Map<Integer, String>> guiRewardGroups = new HashMap<>();
-    private final Map<String, List<Integer>> huskHomeSlots = new HashMap<>();
-    private final Map<String, Map<ActionType, ConfigurationSection>> huskHomeDesigns = new HashMap<>();
-    private final Map<String, List<Integer>> huskHomeCreateSlots  = new HashMap<>();
-    private final Map<String, List<Integer>> huskHomeDeleteSlots  = new HashMap<>();
-    private final Map<String, List<Integer>> huskHomeRtpSlots = new HashMap<>();
-    private final Map<String, Map<Integer, Boolean>> guiScaleWithOutput = new HashMap<>();
-    private final Map<String, Map<Integer, Boolean>> guiCopyItems = new HashMap<>();
-    private final Map<String, String> guiRtpWorld = new HashMap<>();
-    private final Map<String, Map<Integer, String>> guiSlotPermissions = new HashMap<>();
-    private static final int PAGE_STRIDE = 1000; // virtual index step
-    private final Map<UUID, Map<String,Integer>> guiPage     = new ConcurrentHashMap<>();
-    private final Map<String,Integer>            guiMaxPages = new ConcurrentHashMap<>();
+    final Map<UUID, Map<String, Inventory>>                          playerGuis              = new HashMap<>();
+    private final Map<String, Map<Integer, SlotType>>                guiSlotTypes            = new HashMap<>();
+    private final Map<String, Map<Integer, String>>                  buttonLogicCache        = new HashMap<>();
+    private final Map<String, Map<Integer, Double>>                  guiSlotCosts            = new HashMap<>();
+    private final Map<String, Map<Integer, Boolean>>                 guiCostPerStack         = new HashMap<>();
+    private final Map<String, Map<Integer, Boolean>>                 guiCostIsPayout         = new HashMap<>();
+    private final Map<String, Map<Integer, String>>                  guiAcceptedItems        = new HashMap<>();
+    private final Map<String, Map<Integer, Integer>>                 guiAcceptedAmounts      = new HashMap<>();
+    private final Map<String, Map<Integer, String>>                  guiOutputItems          = new HashMap<>();
+    private final Map<String, Map<Integer, Integer>>                 guiPayoutAmounts        = new HashMap<>();
+    private final Map<String, Map<Integer, InputActionType>>         guiInputActions         = new HashMap<>();
+    private final Map<String, Map<Integer, List<Integer>>>           guiSlotConnections      = new HashMap<>();
+    private final Map<String, Map<Integer, Integer>>                 guiReverseConnections   = new HashMap<>();
+    private final Map<String, Map<Integer, String>>                  guiCheckItems           = new HashMap<>();
+    private final Map<String, Map<Integer, String>>                  guiRewardGroups         = new HashMap<>();
+    private final Map<String, List<Integer>>                         huskHomeSlots           = new HashMap<>();
+    private final Map<String, Map<ActionType, ConfigurationSection>> huskHomeDesigns         = new HashMap<>();
+    private final Map<String, List<Integer>>                         huskHomeCreateSlots     = new HashMap<>();
+    private final Map<String, List<Integer>>                         huskHomeDeleteSlots     = new HashMap<>();
+    private final Map<String, List<Integer>>                         huskHomeRtpSlots        = new HashMap<>();
+    private final Map<String, Map<Integer, Boolean>>                 guiScaleWithOutput      = new HashMap<>();
+    private final Map<String, Map<Integer, Boolean>>                 guiCopyItems            = new HashMap<>();
+    private final Map<String, String>                                guiRtpWorld             = new HashMap<>();
+    private final Map<String, Map<Integer, String>>                  guiSlotPermissions      = new HashMap<>();
+    private final Map<UUID, Map<String,Integer>>                     guiPage                 = new ConcurrentHashMap<>();
+    private final Map<String,Integer>                                guiMaxPages             = new ConcurrentHashMap<>();
+    private final Map<UUID, Map<String, Map<Integer, ItemStack>>>    sessionCache            = new ConcurrentHashMap<>();
+    private static final int                                         PAGE_STRIDE             = 1000;
 
+    private static int  virtualIndex(int page, int localSlot) {return page * PAGE_STRIDE + localSlot;}
 
 
     private final JavaPlugin      plugin;
@@ -71,36 +72,48 @@ public class GuiBuilder {
                       FileConfiguration config,
                       ItemRegistry itemRegistry,
                       StorageManager storageManager) {
-        this.plugin        = plugin;          // ← keep a reference
-        this.config        = config;
-        this.itemRegistry  = itemRegistry;
-        this.storageManager = storageManager;
-        this.cachedFillerItem = createFillerItem();
+
+        this.plugin             = plugin;
+        this.config             = config;
+        this.itemRegistry       = itemRegistry;
+        this.storageManager     = storageManager;
+        this.cachedFillerItem   = createFillerItem();
+
+
+        plugin.getServer().getPluginManager().registerEvents(new org.bukkit.event.Listener() {
+            @org.bukkit.event.EventHandler
+            public void onQuit(org.bukkit.event.player.PlayerQuitEvent e) {
+                UUID id = e.getPlayer().getUniqueId();
+                sessionCache.remove(id);   // free the transient item stacks
+                playerGuis.remove(id);     // (optional) drop cached Inventory objects
+            }
+        }, plugin);
+
     }
 
     /* ---------------- public getters ---------------- */
 
-    public Map<String, Map<Integer, SlotType>> getGuiSlotTypes()                   { return guiSlotTypes; }
-    public Map<Integer, Double>  getSlotCosts(String key)                          { return guiSlotCosts.getOrDefault(key, Collections.emptyMap()); }
-    public Map<Integer, Boolean> getCostPerStack(String key)                       { return guiCostPerStack.getOrDefault(key, Collections.emptyMap()); }
-    public Map<Integer, Boolean> getCostIsPayout(String key)                       { return guiCostIsPayout.getOrDefault(key, Collections.emptyMap()); }
-    public Map<Integer, String>  getAcceptedItems(String key)                      { return guiAcceptedItems.getOrDefault(key, Collections.emptyMap()); }
-    public Map<Integer, Integer> getAcceptedAmounts(String key)                    { return guiAcceptedAmounts.getOrDefault(key, Collections.emptyMap()); }
-    public Map<Integer, String>  getOutputItems(String key)                        { return guiOutputItems.getOrDefault(key, Collections.emptyMap()); }
-    public Map<Integer, Integer> getPayoutAmounts(String key)                      { return guiPayoutAmounts.getOrDefault(key, Collections.emptyMap()); }
-    public Map<Integer, InputActionType> getInputActions(String key)               { return guiInputActions.getOrDefault(key, Collections.emptyMap()); }
-    public Map<Integer, List<Integer>>   getSlotConnections(String key)            { return guiSlotConnections.getOrDefault(key, Collections.emptyMap()); }
-    public Map<Integer, Integer>         getReverseSlotConnections(String key)     { return guiReverseConnections.getOrDefault(key, Collections.emptyMap()); }
-    public Map<Integer, String>          getCheckItems(String key)                 { return guiCheckItems.getOrDefault(key, Collections.emptyMap()); }
-    public Map<Integer, String>          getRewardGroups(String key)               { return guiRewardGroups.getOrDefault(key, Collections.emptyMap()); }
-    public Map<Integer, Boolean> getScaleWithOutput(String key)                    { return guiScaleWithOutput.getOrDefault(key, Collections.emptyMap()); }
-    public Map<Integer, Boolean> getCopyItems(String key)                          { return guiCopyItems.getOrDefault(key, Collections.emptyMap()); }
-    public Map<Integer, String> getSlotPermissions(String key)                     { return guiSlotPermissions.getOrDefault(key, Collections.emptyMap()); }
-    public Map<Integer,String> getButtonLogic(String guiKey)                       { return buttonLogicCache.getOrDefault(guiKey, Collections.emptyMap()); }
+    public Map<String, Map<Integer, SlotType>> getGuiSlotTypes()                         { return guiSlotTypes; }
+    public Map<Integer, Double>                getSlotCosts(String key)                  { return guiSlotCosts.getOrDefault(key, Collections.emptyMap()); }
+    public Map<Integer, Boolean>               getCostPerStack(String key)               { return guiCostPerStack.getOrDefault(key, Collections.emptyMap()); }
+    public Map<Integer, Boolean>               getCostIsPayout(String key)               { return guiCostIsPayout.getOrDefault(key, Collections.emptyMap()); }
+    public Map<Integer, String>                getAcceptedItems(String key)              { return guiAcceptedItems.getOrDefault(key, Collections.emptyMap()); }
+    public Map<Integer, Integer>               getAcceptedAmounts(String key)            { return guiAcceptedAmounts.getOrDefault(key, Collections.emptyMap()); }
+    public Map<Integer, String>                getOutputItems(String key)                { return guiOutputItems.getOrDefault(key, Collections.emptyMap()); }
+    public Map<Integer, Integer>               getPayoutAmounts(String key)              { return guiPayoutAmounts.getOrDefault(key, Collections.emptyMap()); }
+    public Map<Integer, InputActionType>       getInputActions(String key)               { return guiInputActions.getOrDefault(key, Collections.emptyMap()); }
+    public Map<Integer, List<Integer>>         getSlotConnections(String key)            { return guiSlotConnections.getOrDefault(key, Collections.emptyMap()); }
+    public Map<Integer, Integer>               getReverseSlotConnections(String key)     { return guiReverseConnections.getOrDefault(key, Collections.emptyMap()); }
+    public Map<Integer, String>                getCheckItems(String key)                 { return guiCheckItems.getOrDefault(key, Collections.emptyMap()); }
+    public Map<Integer, String>                getRewardGroups(String key)               { return guiRewardGroups.getOrDefault(key, Collections.emptyMap()); }
+    public Map<Integer, Boolean>               getScaleWithOutput(String key)            { return guiScaleWithOutput.getOrDefault(key, Collections.emptyMap()); }
+    public Map<Integer, Boolean>               getCopyItems(String key)                  { return guiCopyItems.getOrDefault(key, Collections.emptyMap()); }
+    public Map<Integer, String>                getSlotPermissions(String key)            { return guiSlotPermissions.getOrDefault(key, Collections.emptyMap()); }
+    public Map<Integer,String>                 getButtonLogic(String guiKey)             { return buttonLogicCache.getOrDefault(guiKey, Collections.emptyMap()); }
 
-    public int  getPage(UUID id, String key){ return guiPage.getOrDefault(id, Collections.emptyMap()).getOrDefault(key,0);}
-    public void setPage(UUID id, String key,int p){ guiPage.computeIfAbsent(id,k->new HashMap<>()).put(key,p);}
-    public int  getMaxPages(String key){ return guiMaxPages.getOrDefault(key,9999);}
+    public int  getPage(UUID id, String key)                                             { return guiPage.getOrDefault(id, Collections.emptyMap()).getOrDefault(key,0);}
+    public void setPage(UUID id, String key,int p)                                       { guiPage.computeIfAbsent(id,k->new HashMap<>()).put(key,p);}
+    public int  getMaxPages(String key)                                                  { return guiMaxPages.getOrDefault(key,9999);}
 
     /* ---------------- cache reset on config reload ---------------- */
 
@@ -125,6 +138,7 @@ public class GuiBuilder {
         guiRewardGroups.clear();
         guiSlotPermissions.clear();
         guiCopyItems.clear();
+        sessionCache.clear();
 
         //huskhomes
         huskHomeSlots.clear();
@@ -283,9 +297,9 @@ public class GuiBuilder {
                     }
 
                     case STORAGE_SLOT -> {
-                        Map<Integer,ItemStack> store = storageManager.getOrCreateStorage(playerId, guiKey);
+                        Map<Integer, ItemStack> store = storageManager.getOrCreateStorage(playerId, guiKey);
                         for (int s : slots) {
-                            int v = page * PAGE_STRIDE + s;                 // virtual key
+                            int v = virtualIndex(page, s);        // ← helper instead of page * PAGE_STRIDE + s
                             if (store.containsKey(v)) gui.setItem(s, store.get(v));
                             slotTypes.put(s, slotType);
                             if (permLine != null) permMap.put(s, permLine);
@@ -472,6 +486,8 @@ public class GuiBuilder {
             }
         }
 
+
+
         /* -------- filler -------- */
         for (int i = 0; i < size; i++) {
             if (!slotTypes.containsKey(i)) {
@@ -502,6 +518,25 @@ public class GuiBuilder {
         guiScaleWithOutput.put(guiKey, scaleMap);
         guiCopyItems.put(guiKey, copyMap);
         guiSlotPermissions.put(guiKey, permMap);
+
+
+        /* ----------  inject session-cached items  ---------- */
+        Map<Integer, ItemStack> sessItems =
+                sessionCache
+                        .getOrDefault(playerId, Collections.emptyMap())
+                        .getOrDefault(guiKey, Collections.emptyMap());
+
+        for (Map.Entry<Integer, ItemStack> entry : sessItems.entrySet()) {
+            int virtual    = entry.getKey();
+            int targetPage = virtual / PAGE_STRIDE;
+            if (targetPage != page) continue;     // belongs to another page
+
+            int local = virtual % PAGE_STRIDE;
+            if (local < size) {
+                gui.setItem(local, entry.getValue().clone());
+            }
+        }
+
         populateHuskHomeButtons(guiKey, gui, Bukkit.getPlayer(playerId));
         return gui;
     }
@@ -676,26 +711,55 @@ public class GuiBuilder {
         String guiKey = getGuiKeyByInventory(player, inv);
         if (guiKey == null) return;
 
-        /* active page for this player-GUI combo */
-        int page = getPage(player.getUniqueId(), guiKey);
+        UUID uuid = player.getUniqueId();
+        int page  = getPage(uuid, guiKey);
 
-        Map<Integer, SlotType> slots    = guiSlotTypes.getOrDefault(guiKey, Collections.emptyMap());
-        Map<Integer, ItemStack> storage = storageManager.getOrCreateStorage(player.getUniqueId(), guiKey);
+        Map<Integer, SlotType> slots = guiSlotTypes.getOrDefault(guiKey, Collections.emptyMap());
 
-        /* save each STORAGE_SLOT under its virtual index (page × stride + localSlot) */
-        for (var entry : slots.entrySet()) {
-            if (entry.getValue() != SlotType.STORAGE_SLOT) continue;
+        /* ----------------------------------------------------------------
+         * 1)  Persist real STORAGE_SLOTs to disk via StorageManager
+         * ---------------------------------------------------------------- */
+        Map<Integer, ItemStack> storage =
+                storageManager.getOrCreateStorage(uuid, guiKey);
 
-            int local   = entry.getKey();
-            int virtual = page * PAGE_STRIDE + local;          // page-scoped key
+        for (Map.Entry<Integer, SlotType> e : slots.entrySet()) {
+            if (e.getValue() != SlotType.STORAGE_SLOT) continue;
+
+            int local   = e.getKey();
+            int virtual = virtualIndex(page, local);  // ← helper call
             ItemStack it = inv.getItem(local);
 
-            if (it == null || it.getType() == Material.AIR) storage.remove(virtual);
-            else storage.put(virtual, it.clone());
+            if (it == null || it.getType() == Material.AIR) {
+                storage.remove(virtual);
+            } else {
+                storage.put(virtual, it.clone());
+            }
         }
+        storageManager.savePlayerStorage(uuid);
 
-        storageManager.savePlayerStorage(player.getUniqueId());
+        /* ----------------------------------------------------------------
+         * 2)  Keep ALL other slot types only in RAM until restart/reload
+         * ---------------------------------------------------------------- */
+        Map<Integer, ItemStack> sess =
+                sessionCache
+                        .computeIfAbsent(uuid, k -> new HashMap<>())
+                        .computeIfAbsent(guiKey, k -> new HashMap<>());
+
+        for (Map.Entry<Integer, SlotType> e : slots.entrySet()) {
+            if (e.getValue() == SlotType.STORAGE_SLOT) continue;
+
+            int local   = e.getKey();
+            int virtual = virtualIndex(page, local);
+            ItemStack it = inv.getItem(local);
+
+            if (it == null || it.getType() == Material.AIR) {
+                sess.remove(virtual);
+            } else {
+                sess.put(virtual, it.clone());
+            }
+        }
     }
+
 
     /* --------------- helper: get gui key ----------------------- */
 
@@ -815,6 +879,7 @@ public class GuiBuilder {
                 })
         );
     }
+
 
 
 }

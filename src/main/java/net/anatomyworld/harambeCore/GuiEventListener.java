@@ -9,7 +9,6 @@ import net.anatomyworld.harambeCore.util.EconomyHandler;
 import net.anatomyworld.harambeCore.util.recipebook.RecipeBookUtils;
 import org.bukkit.Material;
 import net.anatomyworld.harambeCore.death.DeathListener.KeyInfo;
-import org.bukkit.permissions.PermissionAttachmentInfo;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
