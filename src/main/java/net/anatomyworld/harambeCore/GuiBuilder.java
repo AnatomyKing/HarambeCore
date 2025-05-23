@@ -2,6 +2,7 @@ package net.anatomyworld.harambeCore;
 
 import net.anatomyworld.harambeCore.storage.StorageManager;
 import net.anatomyworld.harambeCore.item.ItemRegistry;
+import net.anatomyworld.harambeCore.util.PermBypassSender;
 import net.anatomyworld.harambeCore.util.RandomGibberishNameGenerator;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -683,18 +684,28 @@ public class GuiBuilder {
                 return;
             }
 
+
+
             // Regular console:/player:/ or bare command
             CommandSender sender;
+
             if (cmdLine.startsWith("console:")) {
                 sender  = Bukkit.getConsoleSender();
-                cmdLine = cmdLine.substring(8);
+                cmdLine = cmdLine.substring("console:".length()).trim();
             } else if (cmdLine.startsWith("player:")) {
                 sender  = player;
-                cmdLine = cmdLine.substring(7);
+                cmdLine = cmdLine.substring("player:".length()).trim();
+            } else if (cmdLine.startsWith("playernoperm:")) {
+                sender  = new PermBypassSender(player);
+                cmdLine = cmdLine.substring("playernoperm:".length()).trim();
             } else {
                 sender = player;
             }
-            if (cmdLine.startsWith("/")) cmdLine = cmdLine.substring(1);
+
+            if (cmdLine.startsWith("/")) {
+                cmdLine = cmdLine.substring(1);
+            }
+
             Bukkit.dispatchCommand(sender, cmdLine.trim());
             return;
         }
