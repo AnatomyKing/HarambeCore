@@ -611,7 +611,6 @@ public class GuiBuilder {
                 return;   // done
             }
 
-            // ── CREATE a new home ─────────────────────────────────────────
             if ("huskhomes:create".equals(cmdLine)) {
                 OnlineUser user = HuskHomesAPI.getInstance().adaptUser(player);
 
@@ -620,17 +619,24 @@ public class GuiBuilder {
                     return;
                 }
 
-                //  ►  zobileba-3e2d9 ◄
                 String name = RandomGibberishNameGenerator.generate() + "-" +
                         UUID.randomUUID().toString().substring(0, 5);
 
                 HuskHomesAPI.getInstance()
                         .createHome(user, name,
                                 HuskHomesAPI.getInstance().adaptPosition(player.getLocation()))
-                        .thenAccept(h -> Bukkit.getScheduler().runTask(plugin, () -> {
+                        .thenAccept(home -> Bukkit.getScheduler().runTask(plugin, () -> {
+
+                            // 1. feedback
                             player.sendMessage("§aCreated home §e" + name);
-                            populateHuskHomeButtons(guiKey,
-                                    player.getOpenInventory().getTopInventory(), player);
+
+                            // 2. rebuild the GUI *synchronously* so every slot & click-logic is fresh
+                            int page = getPage(player.getUniqueId(), guiKey);
+                            Inventory fresh = generateGui(guiKey, player.getUniqueId(), page);
+                            playerGuis.get(player.getUniqueId()).put(guiKey, fresh);
+                            player.openInventory(fresh);
+
+                            // 3. (optional) tiny sound or particles here if you like
                         }))
                         .exceptionally(ex -> {
                             Bukkit.getScheduler().runTask(plugin,
@@ -643,23 +649,29 @@ public class GuiBuilder {
 
             // ── DELETE a home ─────────────────────────────────────────────
             if (cmdLine.startsWith("huskhomes:del:")) {
-                String homeName = cmdLine.substring("huskhomes:del:".length());
-                OnlineUser user = HuskHomesAPI.getInstance().adaptUser(player);
+                String     homeName = cmdLine.substring("huskhomes:del:".length());
+                OnlineUser user     = HuskHomesAPI.getInstance().adaptUser(player);
 
-                Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-                    HuskHomesAPI.getInstance().deleteHome(user, homeName);
+                // 1. ask HuskHomes to delete the home (it will run async internally)
+                HuskHomesAPI.getInstance().deleteHome(user, homeName);
 
-                    Bukkit.getScheduler().runTask(plugin, () -> {
-                        player.sendMessage("§cDeleted home §e" + homeName);
+                // 2. tell the player right away
+                player.sendMessage("§cDeleted home §e" + homeName);
 
-                        // refresh the open GUI in-place
-                        Inventory inv = player.getOpenInventory().getTopInventory();
-                        populateHuskHomeButtons(guiKey, inv, player);
-                    });
-                });
+                // 3. repaint ~0.25 s later (5 ticks) – plenty of time for the cache to update
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    // make sure the player is still viewing the same GUI
+                    player.getOpenInventory();
+                    if (player.getOpenInventory().getTopInventory().equals(
+                    playerGuis.get(player.getUniqueId()).get(guiKey))) {
+
+                        populateHuskHomeButtons(guiKey,
+                                player.getOpenInventory().getTopInventory(), player);
+                    }
+                }, 5L); // 5 ticks = 0.25 s
+
                 return;
             }
-
             if (cmdLine.startsWith("huskhomes:rtp:")) {
                 String worldName = cmdLine.substring("huskhomes:rtp:".length()).trim();
                 if (!worldName.isEmpty()) {
