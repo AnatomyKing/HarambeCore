@@ -325,6 +325,13 @@ public class GuiEventListener implements Listener {
                     /* death-<mvGroup>-<ownerUuid> */
                     String deathGroup = "death-" + info.group() + "-" + info.owner();
 
+                    /* ─── (C) bail out if that chest has expired ─── */
+                    if (rewardHandler.playerData().isExpired(info.owner(), deathGroup)) {
+                        p.sendMessage("§cThat death chest decayed after 1 hour.");
+                        rewardHandler.playerData().removeGroup(info.owner(), deathGroup);
+                        return;
+                    }
+
                     /* 1. remember mapping so OUTPUT_SLOTs know what to show */
                     Map<Integer,String> globalGroups = guiBuilder.getRewardGroups(guiKey);
 
@@ -432,23 +439,33 @@ public class GuiEventListener implements Listener {
    A.  Death-chest retrieval      (logic == DEATH_GET)
    ──────────────────────────────────────────────── */
                 if ("DEATH_GET".equalsIgnoreCase(logic)) {
+
                     if (group == null || !group.startsWith("death-")) {
-                        p.sendMessage("§cNo death chest loaded."); return;
+                        p.sendMessage("§cNo death chest loaded.");
+                        return;
                     }
 
                     /* format: death-<mvGroup>-<victimUuid> */
                     String[] parts = group.split("-", 3);
-                    if (parts.length < 3) {              // malformed cache entry
-                        p.sendMessage("§cCorrupted chest reference."); return;
+                    if (parts.length < 3) {
+                        p.sendMessage("§cCorrupted chest reference.");
+                        return;
                     }
 
                     String mvGroup = parts[1];
-                    if (!isInMvGroup(p, mvGroup)) {      // ✦ NEW guard ✦
+                    if (!isInMvGroup(p, mvGroup)) {
                         p.sendMessage("§cYou must be in that world-group to loot this chest.");
                         return;
                     }
 
                     UUID victim = UUID.fromString(parts[2]);
+
+                    /* ─── (B) abort if the loot expired ─── */
+                    if (rewardHandler.playerData().isExpired(victim, group)) {
+                        p.sendMessage("§cThis death chest decayed after 1 hour.");
+                        rewardHandler.playerData().removeGroup(victim, group);
+                        return;
+                    }
 
                     /* 1) concrete ItemStacks first */
                     List<ItemStack> queue =
@@ -463,7 +480,8 @@ public class GuiEventListener implements Listener {
                                 rewardHandler.playerData().getAllRewards(victim, group));
                         return;
                     }
-                    p.sendMessage("§cChest is empty."); return;
+                    p.sendMessage("§cChest is empty.");
+                    return;
                 }
 
 /* ────────────────────────────────────────────────
@@ -531,32 +549,20 @@ public class GuiEventListener implements Listener {
 
     private void paintRetrieval(Inventory inv,
                                 Map<Integer, GuiBuilder.SlotType> slotTypes,
-                                Map<Integer, String> groupMap,
-                                String group,
-                                Map<String, Integer> rewards) {
+                                Map<Integer, String>              groupMap,
+                                String                            group,
+                                Map<String, Integer>              rewards) {
 
-    /* ─────────────────────────────────────────────────────────────
-       Whose reward data are we showing?
-
-       • Normal groups   → viewer’s own UUID
-       • Death-chest key → victim UUID, which may be encoded as
-                           "death-<uuid>"             (old format)  or
-                           "death-<mvGroup>-<uuid>"   (new format)
-    ───────────────────────────────────────────────────────────── */
+        /* ───── determine whose rewards we’re showing (viewer or victim) ───── */
         UUID dataUuid;
         if (group != null && group.startsWith("death-")) {
-            String tail = group.substring("death-".length());   // anything after "death-"
+            String tail = group.substring("death-".length());      // strip prefix
 
-        /* new format:  mvGroup may itself contain dashes, so
-           take *last* dash and everything after it as UUID    */
-            int lastDash = tail.lastIndexOf('-');
-            if (lastDash >= 0) {
-                tail = tail.substring(lastDash + 1);
-            }
+            int lastDash = tail.lastIndexOf('-');                  // new-format fix
+            if (lastDash >= 0) tail = tail.substring(lastDash + 1);
 
-            try {
-                dataUuid = UUID.fromString(tail);
-            } catch (IllegalArgumentException ex) {   // corrupted string → fallback
+            try { dataUuid = UUID.fromString(tail); }
+            catch (IllegalArgumentException ex) {                  // corruption fallback
                 dataUuid = inv.getViewers().isEmpty()
                         ? new UUID(0, 0)
                         : inv.getViewers().get(0).getUniqueId();
@@ -567,11 +573,17 @@ public class GuiEventListener implements Listener {
                     : inv.getViewers().get(0).getUniqueId();
         }
 
-        /* ------------------------------------------------------------------ */
+        /* ─── (A) auto-purge and abort if this death-queue expired ─── */
+        if (group != null && group.startsWith("death-") &&
+                rewardHandler.playerData().isExpired(dataUuid, group)) {
+            rewardHandler.playerData().removeGroup(dataUuid, group);
+            return;                   // nothing to show – it decayed
+        }
 
+        /* ------------------------------------------------------------------ */
         List<Integer> outs = outputSlotsForGroup(slotTypes, groupMap, group);
 
-        /* 1) stack-queue (concrete ItemStacks) ------------------------------ */
+        /* 1) concrete ItemStacks ------------------------------------------- */
         List<ItemStack> stackRewards =
                 rewardHandler.playerData().getStackRewards(dataUuid, group);
 
@@ -580,24 +592,18 @@ public class GuiEventListener implements Listener {
             inv.setItem(outs.get(pos), stackRewards.get(pos));
         }
 
-        /* 2) id→item reward queue (classic rewards) ------------------------ */
+        /* 2) id→item reward queue ------------------------------------------ */
         List<String> ids = new ArrayList<>(rewards.keySet());
         for (int i = 0; pos < outs.size(); pos++, i++) {
             int slot = outs.get(pos);
 
-            if (i >= ids.size()) {                 // clear leftover cells
-                inv.setItem(slot, null);
-                continue;
-            }
+            if (i >= ids.size()) { inv.setItem(slot, null); continue; }
 
             String id  = ids.get(i);
             int    qty = rewards.get(id);
 
             ItemStack proto = itemRegistry.getItem(id);
-            if (proto == null) {
-                inv.setItem(slot, null);
-                continue;
-            }
+            if (proto == null) { inv.setItem(slot, null); continue; }
 
             ItemStack stack = proto.clone();
             stack.setAmount(Math.min(qty, stack.getMaxStackSize()));

@@ -56,6 +56,28 @@ public class PlayerRewardData {
         return map;
     }
 
+    private static final String EXPIRY_NODE = "expiry_epoch";
+    private static final long   TTL_MS      = 3_600_000L;   // 1 h
+
+    /** set expiry to “now + TTL” (overwrite if already present) */
+    public void setExpiry(UUID id, String group) {
+        FileConfiguration yml = loadConfig(id);
+        yml.set("rewards." + group + '.' + EXPIRY_NODE,
+                System.currentTimeMillis() + TTL_MS);
+        saveConfig(id, yml);
+    }
+
+    /** @return epoch millis, or 0 if none stored */
+    public long getExpiry(UUID id, String group) {
+        return loadConfig(id).getLong("rewards." + group + '.' + EXPIRY_NODE, 0L);
+    }
+
+    /** @return true if group EXISTS **and** is past its TTL */
+    public boolean isExpired(UUID id, String group) {
+        long exp = getExpiry(id, group);
+        return exp > 0 && System.currentTimeMillis() >= exp;
+    }
+
     /* ---------- remove ---------- */
 
     public void removeReward(UUID id, String group, String rewardId) {

@@ -4,6 +4,7 @@ import net.anatomyworld.harambeCore.rewards.RewardHandler;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
+import org.bukkit.GameRule;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
@@ -64,25 +65,45 @@ public final class DeathListener implements Listener {
     @EventHandler
     public void onPlayerDeath(PlayerDeathEvent e) {
         Player victim = e.getEntity();
-        UUID   vid    = victim.getUniqueId();
+        UUID vid = victim.getUniqueId();
 
-        /* Which Multiverse-Inventories group did this death happen in? */
+        // Skip if keepInventory is true in this world
+        Boolean keepInv = victim.getWorld().getGameRuleValue(GameRule.KEEP_INVENTORY);
+        if (Boolean.TRUE.equals(keepInv)) {
+            return;
+        }
+
         String mvGroup = WorldGroupHelper.getGroupName(victim.getWorld());
-
-        /* Reward-group is now scoped by world-group *and* victim */
         String rewardGroup = "death-" + mvGroup + "-" + vid;
 
-        List<ItemStack> drops = List.copyOf(e.getDrops());
-        if (drops.isEmpty()) return;           // nothing to save
+        boolean queueExists = !rewards.playerData().getStackRewards(vid, rewardGroup).isEmpty();
 
-        drops.forEach(d -> rewards.playerData()
-                .addStackReward(vid, rewardGroup, d));
-        e.getDrops().clear();                  // suppress vanilla drop
+        if (queueExists && !rewards.playerData().isExpired(vid, rewardGroup)) {
+            return; // Let vanilla drops occur if not expired
+        }
+
+        if (queueExists) {
+            rewards.playerData().removeGroup(vid, rewardGroup);
+        }
+
+        List<ItemStack> drops = List.copyOf(e.getDrops());
+        if (drops.isEmpty()) return;
+
+        drops.forEach(d -> rewards.playerData().addStackReward(vid, rewardGroup, d));
+        rewards.playerData().setExpiry(vid, rewardGroup);
+
+        e.getDrops().clear();
 
         victim.getWorld().dropItemNaturally(
                 victim.getLocation(),
-                createKey(victim, mvGroup));
+                createKey(victim, mvGroup)
+        );
+
+        WorldGroupHelper.broadcastDeathKey(victim, mvGroup);
     }
+
+
+
 
     /* ───────────────────────── Internals ───────────────────────── */
 

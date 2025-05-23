@@ -1,6 +1,7 @@
 // HarambeCore.java
 package net.anatomyworld.harambeCore;
 
+import net.anatomyworld.harambeCore.config.YamlConfigLoader;
 import net.anatomyworld.harambeCore.death.DeathListener;
 import net.anatomyworld.harambeCore.dialogue.DialogueListeners;
 import net.anatomyworld.harambeCore.dialogue.DialogueModule;
@@ -16,11 +17,15 @@ import net.anatomyworld.harambeCore.util.YLevelTeleportHandler;
 import net.anatomyworld.harambeCore.util.poison.PoisonModule;
 import net.anatomyworld.harambeCore.util.recipebook.RecipeBookModule;
 
+import org.bukkit.Bukkit;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.util.HashSet;
 
 public final class HarambeCore extends JavaPlugin {
 
@@ -61,6 +66,7 @@ public final class HarambeCore extends JavaPlugin {
                 new DialogueListeners(dialogueModule),
                 this
         );
+
 
         // Core listeners
         getServer().getPluginManager().registerEvents(
