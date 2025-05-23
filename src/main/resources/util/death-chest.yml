@@ -1,0 +1,16 @@
+# Minutes before a death-chest queue decays
+expiry_minutes: 60
+furniture_item: death_chest_harambenium
+
+broadcast:
+  enabled: true
+  # Placeholder tokens: %player% %world_alias% %x% %y% %z%
+  message: "&6[DeathKey] &eDeath key spawned for &c%player% &eat &b%world_alias% &7(&d%x%, %y%, %z%&7)"
+
+key:
+  material: PAPER
+  custom_model_data: 0
+  name: "&cDeath Key &7▶ &f%player%"
+  lore:
+    - "&7World: &b%world_alias%"
+    - "&7Retrieve your items in the&f /reclaim GUI"

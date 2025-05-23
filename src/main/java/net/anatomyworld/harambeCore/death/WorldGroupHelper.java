@@ -3,62 +3,56 @@ package net.anatomyworld.harambeCore.death;
 import com.onarandombox.multiverseinventories.MultiverseInventories;
 import com.onarandombox.multiverseinventories.WorldGroup;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 
-/** Utility – resolves the Multiverse-Inventories world-group a world belongs to. */
 public final class WorldGroupHelper {
 
-    private WorldGroupHelper() { }  // static-only
+    private WorldGroupHelper() {}
 
-    /** @return group name, or "ungrouped" if MV-Inventories absent / no match */
+    /* ------------ Multiverse-Inventories group resolver ------------ */
     public static String getGroupName(World world) {
-        MultiverseInventories mvi =
-                (MultiverseInventories) Bukkit.getPluginManager()
-                        .getPlugin("Multiverse-Inventories");
-        if (mvi == null || !mvi.isEnabled()) {
-            return "ungrouped";
-        }
+        var mvi = (MultiverseInventories) Bukkit.getPluginManager()
+                .getPlugin("Multiverse-Inventories");
+        if (mvi == null || !mvi.isEnabled()) return "ungrouped";
 
-        for (WorldGroup grp : mvi.getGroupManager()
-                .getGroupsForWorld(world.getName())) {
-            return grp.getName();           // first match is fine
-        }
+        for (WorldGroup g : mvi.getGroupManager().getGroupsForWorld(world.getName()))
+            return g.getName();
+
         return "ungrouped";
     }
 
+    /* ------------ broadcast helper (YML-driven) -------------------- */
+    static void broadcastDeathKey(Player victim,
+                                  String mvGroup,
+                                  DeathChestModule cfg) {
 
-    static void broadcastDeathKey(Player victim, String mvGroup) {
+        if (!cfg.broadcast().getBoolean("enabled", true)) return;
 
-        /* ---------- resolve Multiverse alias ---------- */
-        String alias = mvGroup;                       // sensible fallback
-        var raw = Bukkit.getPluginManager().getPlugin("Multiverse-Core");
-
-        if (raw instanceof com.onarandombox.MultiverseCore.MultiverseCore mvCore) {
-            var mvw = mvCore.getMVWorldManager().getMVWorld(victim.getWorld());
-            if (mvw != null && !mvw.getAlias().isEmpty()) {
-                alias = mvw.getAlias();
-            }
+        /* pretty alias via Multiverse-Core */
+        String alias = mvGroup;
+        var coreRaw = Bukkit.getPluginManager().getPlugin("Multiverse-Core");
+        if (coreRaw instanceof com.onarandombox.MultiverseCore.MultiverseCore core) {
+            var mvw = core.getMVWorldManager().getMVWorld(victim.getWorld());
+            if (mvw != null && !mvw.getAlias().isEmpty()) alias = mvw.getAlias();
         }
 
-        /* ---------- build component ---------- */
-        Location loc = victim.getLocation();
-        Component message = Component.text()
-                .append(Component.text("[DeathKey] ", NamedTextColor.GOLD))
-                .append(Component.text("Death key spawned for ", NamedTextColor.YELLOW))
-                .append(Component.text(victim.getName(), NamedTextColor.RED))
-                .append(Component.text(" at ", NamedTextColor.YELLOW))
-                .append(Component.text(alias, NamedTextColor.AQUA))
-                .append(Component.text(" (", NamedTextColor.GRAY))
-                .append(Component.text(loc.getBlockX() + ", " + loc.getBlockY() + ", " + loc.getBlockZ(),
-                        NamedTextColor.LIGHT_PURPLE))
-                .append(Component.text(")", NamedTextColor.GRAY))
-                .build();
+        Location l = victim.getLocation();
+        String raw = cfg.broadcast().getString(
+                "message",
+                "&6[DeathKey] &eDeath key spawned for &c%player% &eat &b%world_alias% &7(&d%x%, %y%, %z%&7)"
+        );
 
-        /* ---------- broadcast ---------- */
-        Bukkit.getServer().broadcast(message);
+        String txt = raw.replace("%player%", victim.getName())
+                .replace("%world_alias%", alias)
+                .replace("%x%", String.valueOf(l.getBlockX()))
+                .replace("%y%", String.valueOf(l.getBlockY()))
+                .replace("%z%", String.valueOf(l.getBlockZ()));
+
+        Component msg = LegacyComponentSerializer.legacyAmpersand().deserialize(txt);
+        Bukkit.getServer().broadcast(msg);
     }
 }

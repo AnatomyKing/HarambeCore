@@ -1,8 +1,7 @@
+/* net.anatomyworld.harambeCore.death.DeathListener */
 package net.anatomyworld.harambeCore.death;
 
 import net.anatomyworld.harambeCore.rewards.RewardHandler;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.GameRule;
 import org.bukkit.Material;
@@ -20,34 +19,41 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Saves drops into “death-&lt;group&gt;-&lt;victimUuid&gt;”
- * and drops a PAPER key storing owner + group.
+ * Queues drops, spawns Mythic-Crucible death-chest furniture and broadcasts
+ * the location.  If the furniture is manually broken, DeathChestManager
+ * drops a key that others can steal.
  */
 public final class DeathListener implements Listener {
 
-    /* ─── PersistentData keys ───────────────────────────────────── */
-    private static final NamespacedKey KEY_OWNER =
+    /* ─── PDC keys (shared with DeathKeyBuilder & DeathChestManager) ── */
+    public static final NamespacedKey KEY_OWNER =
             new NamespacedKey("harambe", "death_owner");
-    private static final NamespacedKey KEY_GROUP =
+    public static final NamespacedKey KEY_GROUP =
             new NamespacedKey("harambe", "death_group");
 
-    private final JavaPlugin   plugin;
-    private final RewardHandler rewards;
+    private final JavaPlugin        plugin;
+    private final RewardHandler     rewards;
+    private final DeathChestModule  cfg;
+    private final DeathChestManager chestMgr;
 
-    public DeathListener(JavaPlugin plugin, RewardHandler rewards) {
-        this.plugin  = plugin;
-        this.rewards = rewards;
+    public DeathListener(JavaPlugin plugin,
+                         RewardHandler rewards,
+                         DeathChestModule cfg,
+                         DeathChestManager chestMgr) {
+
+        this.plugin   = plugin;
+        this.rewards  = rewards;
+        this.cfg      = cfg;
+        this.chestMgr = chestMgr;
+
         Bukkit.getPluginManager().registerEvents(this, plugin);
     }
 
-    /* ───────────────────────── Public helpers ──────────────────── */
+    /* ────────────────────── key-parsing helper ────────────────────── */
+    public record KeyInfo(UUID owner, String group) { }
 
-    /** Parsed contents of a death key */
-    public record KeyInfo(UUID owner, String group) {}
-
-    /** @return info if valid paper key, else null */
     public static KeyInfo readKey(ItemStack stack) {
-        if (stack == null || stack.getType() != Material.PAPER) return null;
+        if (stack == null || stack.getType() == Material.AIR) return null;
         ItemMeta meta = stack.getItemMeta();  if (meta == null) return null;
 
         String rawOwner = meta.getPersistentDataContainer()
@@ -57,70 +63,45 @@ public final class DeathListener implements Listener {
         if (rawOwner == null || rawGroup == null) return null;
 
         try { return new KeyInfo(UUID.fromString(rawOwner), rawGroup); }
-        catch (IllegalArgumentException ex) { return null; }
+        catch (IllegalArgumentException ignored) { return null; }
     }
 
-    /* ───────────────────────── Event hook ───────────────────────── */
-
+    /* ────────────────────── main event hook ──────────────────────── */
     @EventHandler
     public void onPlayerDeath(PlayerDeathEvent e) {
+
         Player victim = e.getEntity();
-        UUID vid = victim.getUniqueId();
 
-        // Skip if keepInventory is true in this world
-        Boolean keepInv = victim.getWorld().getGameRuleValue(GameRule.KEEP_INVENTORY);
-        if (Boolean.TRUE.equals(keepInv)) {
+        // honour keepInventory
+        if (Boolean.TRUE.equals(
+                victim.getWorld().getGameRuleValue(GameRule.KEEP_INVENTORY)))
             return;
-        }
 
-        String mvGroup = WorldGroupHelper.getGroupName(victim.getWorld());
+        UUID   vid         = victim.getUniqueId();
+        String mvGroup     = WorldGroupHelper.getGroupName(victim.getWorld());
         String rewardGroup = "death-" + mvGroup + "-" + vid;
 
-        boolean queueExists = !rewards.playerData().getStackRewards(vid, rewardGroup).isEmpty();
+        /* queue already exists and is still valid → let vanilla drops through */
+        if (!rewards.playerData().getStackRewards(vid, rewardGroup).isEmpty()
+                && !rewards.playerData().isExpired(vid, rewardGroup))
+            return;
 
-        if (queueExists && !rewards.playerData().isExpired(vid, rewardGroup)) {
-            return; // Let vanilla drops occur if not expired
-        }
-
-        if (queueExists) {
+        /* purge an expired queue */
+        if (rewards.playerData().isExpired(vid, rewardGroup))
             rewards.playerData().removeGroup(vid, rewardGroup);
-        }
 
+        /* capture the fresh drops */
         List<ItemStack> drops = List.copyOf(e.getDrops());
         if (drops.isEmpty()) return;
 
         drops.forEach(d -> rewards.playerData().addStackReward(vid, rewardGroup, d));
         rewards.playerData().setExpiry(vid, rewardGroup);
-
         e.getDrops().clear();
 
-        victim.getWorld().dropItemNaturally(
-                victim.getLocation(),
-                createKey(victim, mvGroup)
-        );
+        /* spawn Mythic-Crucible furniture */
+        chestMgr.spawnChest(victim, mvGroup, rewardGroup);
 
-        WorldGroupHelper.broadcastDeathKey(victim, mvGroup);
-    }
-
-
-
-
-    /* ───────────────────────── Internals ───────────────────────── */
-
-    private ItemStack createKey(Player owner, String mvGroup) {
-        ItemStack paper = new ItemStack(Material.PAPER);
-        ItemMeta  meta  = paper.getItemMeta();
-
-        meta.displayName(Component.text(
-                "Death Key ▶ " + owner.getName() + " [" + mvGroup + ']',
-                NamedTextColor.RED));
-
-        meta.getPersistentDataContainer().set(KEY_OWNER,
-                PersistentDataType.STRING, owner.getUniqueId().toString());
-        meta.getPersistentDataContainer().set(KEY_GROUP,
-                PersistentDataType.STRING, mvGroup);
-
-        paper.setItemMeta(meta);
-        return paper;
+        /* broadcast */
+        WorldGroupHelper.broadcastDeathKey(victim, mvGroup, cfg);
     }
 }

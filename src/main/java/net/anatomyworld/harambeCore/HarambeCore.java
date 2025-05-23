@@ -1,7 +1,8 @@
 // HarambeCore.java
 package net.anatomyworld.harambeCore;
 
-import net.anatomyworld.harambeCore.config.YamlConfigLoader;
+import net.anatomyworld.harambeCore.death.DeathChestManager;
+import net.anatomyworld.harambeCore.death.DeathChestModule;
 import net.anatomyworld.harambeCore.death.DeathListener;
 import net.anatomyworld.harambeCore.dialogue.DialogueListeners;
 import net.anatomyworld.harambeCore.dialogue.DialogueModule;
@@ -16,93 +17,96 @@ import net.anatomyworld.harambeCore.util.EconomyHandler;
 import net.anatomyworld.harambeCore.util.YLevelTeleportHandler;
 import net.anatomyworld.harambeCore.util.poison.PoisonModule;
 import net.anatomyworld.harambeCore.util.recipebook.RecipeBookModule;
-
 import org.bukkit.Bukkit;
-import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.util.HashSet;
 
+/**
+ * Main plugin entry-point.
+ */
 public final class HarambeCore extends JavaPlugin {
 
+    /* ---------- static logger ---------- */
     public static final Logger logger = LoggerFactory.getLogger(HarambeCore.class);
 
-    private ItemRegistry       itemRegistry;
-    private GuiBuilder         guiBuilder;
-    private CommandHandler     commandHandler;
-    private StorageManager     storageManager;
-    private RewardHandler      rewardHandler;
+    /* ---------- core components ---------- */
+    private ItemRegistry      itemRegistry;
+    private GuiBuilder        guiBuilder;
+    private CommandHandler    commandHandler;
+    private StorageManager    storageManager;
+    private RewardHandler     rewardHandler;
 
-    /* util modules */
-    private DialogueModule     dialogueModule;
-    private PoisonModule       poisonModule;
-    private RecipeBookModule   recipeBookModule;
-    private RewardGroupModule  rewardGroupModule;
+    /* ---------- util / feature modules ---------- */
+    private DialogueModule        dialogueModule;
+    private PoisonModule          poisonModule;
+    private RecipeBookModule      recipeBookModule;
+    private RewardGroupModule     rewardGroupModule;
     private YLevelTeleportHandler yLevelTeleportHandler;
+    private DeathChestModule      deathChestModule;
+    private DeathChestManager     deathChestManager;
 
+    /* ====================================================================== */
+    /*  ENABLE                                                                */
+    /* ====================================================================== */
     @Override
     public void onEnable() {
+
         logger.info("§aHarambeCore starting…");
 
-        // Economy check
+        /* economy check ---------------------------------------------------- */
         if (!EconomyHandler.setupEconomy()) {
             logger.error("No Vault / economy plugin – disabling.");
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
 
-        // Config + util folder
+        /* config & util dir ------------------------------------------------- */
         saveDefaultConfig();
         new File(getDataFolder(), "util").mkdirs();
 
-        // Dialogue module (loads util/dialog-wiki.yml)
+        /* dialogue system --------------------------------------------------- */
         dialogueModule = new DialogueModule(this);
         dialogueModule.enable();
-        getServer().getPluginManager().registerEvents(
-                new DialogueListeners(dialogueModule),
-                this
-        );
+        Bukkit.getPluginManager().registerEvents(new DialogueListeners(dialogueModule), this);
 
-
-        // Core listeners
-        getServer().getPluginManager().registerEvents(
-                new AdventureModeHandler(this),
-                this
-        );
-
+        /* base listeners ---------------------------------------------------- */
+        Bukkit.getPluginManager().registerEvents(new AdventureModeHandler(this), this);
         yLevelTeleportHandler = new YLevelTeleportHandler(this);
-        getServer().getPluginManager().registerEvents(yLevelTeleportHandler, this);
+        Bukkit.getPluginManager().registerEvents(yLevelTeleportHandler, this);
 
-        // Registries & storage
+        /* registries & storage --------------------------------------------- */
         itemRegistry   = new MythicMobsRegistry();
         storageManager = new StorageManager(this);
 
-        // Build GUI
+        /* GUI builder ------------------------------------------------------- */
         guiBuilder = new GuiBuilder(this, getConfig(), itemRegistry, storageManager);
 
-        // Load other util modules
+        /* small util modules ------------------------------------------------ */
         poisonModule      = new PoisonModule(this);
         recipeBookModule  = new RecipeBookModule(this, guiBuilder);
         rewardGroupModule = new RewardGroupModule(this);
+        deathChestModule  = new DeathChestModule(this);
 
         poisonModule.enable();
         recipeBookModule.enable();
         rewardGroupModule.enable();
+        deathChestModule.enable();   // loads util/death-chest.yml
 
-        // Setup rewards
+        /* reward system ----------------------------------------------------- */
         PlayerRewardData playerData = new PlayerRewardData(this);
-        rewardHandler = new RewardHandler(
-                rewardGroupModule.getManager(),
-                playerData
-        );
+        rewardHandler = new RewardHandler(rewardGroupModule.getManager(), playerData);
 
-        new DeathListener(this, rewardHandler);// ✨ NEW
+        /* death-chest runtime helper --------------------------------------- */
+        deathChestManager = new DeathChestManager(this, deathChestModule);
+        // (constructor registers its own furniture listeners)
 
-        // Commands & GUI listener
+        /* death-event hook -------------------------------------------------- */
+        new DeathListener(this, rewardHandler, deathChestModule, deathChestManager);
+
+        /* commands & GUI listener ------------------------------------------ */
         commandHandler = new CommandHandler(
                 this,
                 guiBuilder,
@@ -113,7 +117,7 @@ public final class HarambeCore extends JavaPlugin {
         );
         commandHandler.registerCommands();
 
-        getServer().getPluginManager().registerEvents(
+        Bukkit.getPluginManager().registerEvents(
                 new GuiEventListener(guiBuilder, rewardHandler, itemRegistry),
                 this
         );
@@ -121,27 +125,37 @@ public final class HarambeCore extends JavaPlugin {
         logger.info("§aHarambeCore enabled successfully.");
     }
 
+    /* ====================================================================== */
+    /*  DISABLE                                                               */
+    /* ====================================================================== */
     @Override
     public void onDisable() {
-        // shutdown modules and save GUI data
         recipeBookModule.disable();
         rewardGroupModule.disable();
         dialogueModule.disable();
+        deathChestModule.disable();
         storageManager.onShutdown();
 
         logger.info("§cHarambeCore disabled.");
     }
 
-    /** Call from your `/harambecore reload` command */
+    /* ====================================================================== */
+    /*  /harambecore reload                                                   */
+    /* ====================================================================== */
     public void reloadPlugin() {
+
         reloadConfig();
         guiBuilder.updateConfig(getConfig());
-        commandHandler.registerCommands();  // re-register after reload
+        commandHandler.registerCommands();          // pick up changes
+
+        /* hot-reload utility modules */
         dialogueModule.enable();
         yLevelTeleportHandler.reload();
         poisonModule.enable();
         recipeBookModule.enable();
         rewardGroupModule.enable();
+        deathChestModule.enable();                  // reload expiry etc.
+
         logger.info("§aHarambeCore reloaded.");
     }
 }

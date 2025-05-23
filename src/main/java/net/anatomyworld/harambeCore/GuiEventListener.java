@@ -297,8 +297,8 @@ public class GuiEventListener implements Listener {
             case CHECK_BUTTON -> {
                 e.setCancelled(true);
 
-                List<Integer> targets = conn.get(clicked);          // linked INPUT_SLOTs
-                String tag = logicMap.get(clicked);                 // custom tag
+                List<Integer> targets = conn.get(clicked);      // linked INPUT_SLOTs
+                String tag = logicMap.get(clicked);             // custom tag
 
 /* ============================================================
    A.  Death-key submission / validation (“DEATH_ITEMS”)
@@ -312,7 +312,7 @@ public class GuiEventListener implements Listener {
 
                     ItemStack keyStack = e.getInventory().getItem(targets.get(0));
                     KeyInfo info = DeathListener.readKey(keyStack);
-                    if (info == null) {                     // invalid or wrong item
+                    if (info == null) {                         // invalid or wrong item
                         p.sendMessage("§cInvalid death key."); return;
                     }
 
@@ -330,6 +330,16 @@ public class GuiEventListener implements Listener {
                         p.sendMessage("§cThat death chest decayed after 1 hour.");
                         rewardHandler.playerData().removeGroup(info.owner(), deathGroup);
                         return;
+                    }
+
+                    /* ─── (D) chest empty?  (NEW) ─────────────────── */
+                    boolean noStacks = rewardHandler.playerData()
+                            .getStackRewards(info.owner(), deathGroup).isEmpty();
+                    boolean noIds = rewardHandler.playerData()
+                            .getAllRewards(info.owner(), deathGroup).isEmpty();
+                    if (noStacks && noIds) {
+                        p.sendMessage("§cNo death chest found for that key.");
+                        return;                     // ↞ key *not* consumed
                     }
 
                     /* 1. remember mapping so OUTPUT_SLOTs know what to show */
@@ -352,12 +362,12 @@ public class GuiEventListener implements Listener {
                             rewardHandler.playerData()
                                     .getAllRewards(info.owner(), deathGroup));
 
-                    /* 3. consume one key */
+                    /* 3. consume one key  (only reached if chest exists) */
                     keyStack.setAmount(keyStack.getAmount() - 1);
                     if (keyStack.getAmount() <= 0) {
                         e.getInventory().setItem(targets.get(0), null);
                     }
-                    return;    // ✔ done – skip normal flow
+                    return;  // ✔ done – skip normal flow
                 }
 
 /* ============================================================

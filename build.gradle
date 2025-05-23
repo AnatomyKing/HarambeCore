@@ -30,6 +30,7 @@ dependencies {
     compileOnly name: 'ProtocolLib'
     compileOnly name: 'multiverse-inventories-4.2.8'
     compileOnly name: 'multiverse-core-4.3.14'
+    compileOnly name: 'MythicCrucible-2.2.0-SNAPSHOT'
 }
 
 configurations.configureEach {

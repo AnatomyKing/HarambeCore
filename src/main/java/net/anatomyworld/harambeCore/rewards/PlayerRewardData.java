@@ -1,4 +1,3 @@
-/* net.anatomyworld.harambeCore.rewards.PlayerRewardData */
 package net.anatomyworld.harambeCore.rewards;
 
 import net.anatomyworld.harambeCore.config.YamlConfigLoader;
@@ -10,7 +9,6 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
-
 
 public class PlayerRewardData {
 
@@ -45,19 +43,23 @@ public class PlayerRewardData {
 
     /** @return map of rewardId → count (empty if none) */
     public Map<String, Integer> getAllRewards(UUID id, String group) {
-        FileConfiguration yml   = loadConfig(id);
+        FileConfiguration yml    = loadConfig(id);
         ConfigurationSection sec = yml.getConfigurationSection(path(group));
         if (sec == null) return new HashMap<>();
 
         Map<String, Integer> map = new HashMap<>();
-        for (String key : sec.getKeys(false)) {
+        for (String key : sec.getKeys(false))
             map.put(key, sec.getInt(key, 0));
-        }
         return map;
     }
 
+    /* ---------- expiry handling ---------- */
+
     private static final String EXPIRY_NODE = "expiry_epoch";
-    private static final long   TTL_MS      = 3_600_000L;   // 1 h
+    private static       long   TTL_MS      = 3_600_000L;   // default 1 h – overwritten by DeathChestModule
+
+    /** Called once from DeathChestModule after it read the YML */
+    public static void setTtlMs(long ms) { TTL_MS = ms; }
 
     /** set expiry to “now + TTL” (overwrite if already present) */
     public void setExpiry(UUID id, String group) {
@@ -72,7 +74,7 @@ public class PlayerRewardData {
         return loadConfig(id).getLong("rewards." + group + '.' + EXPIRY_NODE, 0L);
     }
 
-    /** @return true if group EXISTS **and** is past its TTL */
+    /** @return true if group exists **and** is past its TTL */
     public boolean isExpired(UUID id, String group) {
         long exp = getExpiry(id, group);
         return exp > 0 && System.currentTimeMillis() >= exp;
@@ -103,6 +105,8 @@ public class PlayerRewardData {
         yml.set("rewards." + group, null);
         saveConfig(id, yml);
     }
+
+    /* ---------- stack-queue ---------- */
 
     /** Append a clone of the ItemStack to the player’s personal queue. */
     public void addStackReward(UUID id, String group, ItemStack stack) {
