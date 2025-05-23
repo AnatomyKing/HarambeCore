@@ -17,6 +17,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.plugin.java.JavaPlugin;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Locale;
@@ -62,23 +63,26 @@ public class GuiBuilder {
     private static int  virtualIndex(int page, int localSlot) {return page * PAGE_STRIDE + localSlot;}
 
 
+
     private final JavaPlugin      plugin;
     private final ItemRegistry    itemRegistry;
     private FileConfiguration     config;
     private ItemStack             cachedFillerItem;
     private final StorageManager  storageManager;
-
+    private List<String> allowedPerms = new ArrayList<>();
 
     public GuiBuilder(JavaPlugin plugin,
                       FileConfiguration config,
                       ItemRegistry itemRegistry,
                       StorageManager storageManager) {
 
-        this.plugin             = plugin;
-        this.config             = config;
-        this.itemRegistry       = itemRegistry;
-        this.storageManager     = storageManager;
-        this.cachedFillerItem   = createFillerItem();
+        this.plugin         = plugin;
+        this.config         = config;
+        this.itemRegistry   = itemRegistry;
+        this.storageManager = storageManager;
+
+        this.allowedPerms   = config.getStringList("allowed-perms");
+        this.cachedFillerItem = createFillerItem();
 
 
         plugin.getServer().getPluginManager().registerEvents(new org.bukkit.event.Listener() {
@@ -116,6 +120,7 @@ public class GuiBuilder {
     public void setPage(UUID id, String key,int p)                                       { guiPage.computeIfAbsent(id,k->new HashMap<>()).put(key,p);}
     public int  getMaxPages(String key)                                                  { return guiMaxPages.getOrDefault(key,9999);}
 
+
     /* ---------------- cache reset on config reload ---------------- */
 
     public void updateConfig(FileConfiguration config) {
@@ -150,6 +155,7 @@ public class GuiBuilder {
         guiRtpWorld.clear();
 
         cachedFillerItem = createFillerItem();
+        this.allowedPerms = config.getStringList("allowed-perms");
     }
 
     public Set<String> getGuiKeys() {
@@ -606,13 +612,23 @@ public class GuiBuilder {
                 return;
             }
 
-            /* ── run command as CONSOLE, skipping perms:  noperm: ──── */
+            /* ── noperm:<command> – give the nodes from allowed-perms ─── */
             if (cmdLine.toLowerCase(Locale.ROOT).startsWith("noperm:")) {
-                String consoleCmd = cmdLine.substring("noperm:".length()).trim();
-                if (consoleCmd.startsWith("/")) consoleCmd = consoleCmd.substring(1);
-                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), consoleCmd);
+                String playerCmd = cmdLine.substring("noperm:".length()).trim();
+                if (playerCmd.startsWith("/")) playerCmd = playerCmd.substring(1);
+
+                // grant the nodes listed in config.yml → allowed-perms:
+                PermissionAttachment attach = player.addAttachment(plugin);
+                allowedPerms.forEach(node -> attach.setPermission(node, true));
+
+                try {
+                    player.performCommand(playerCmd);      // run with extra nodes
+                } finally {
+                    player.removeAttachment(attach);       // always clean up
+                }
                 return;
             }
+
 
             /* ── HuskHomes shortcuts (unchanged) ───────────────────── */
             if (cmdLine.startsWith("huskhomes:tp:")) {
