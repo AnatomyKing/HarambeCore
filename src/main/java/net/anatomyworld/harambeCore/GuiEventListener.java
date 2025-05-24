@@ -119,6 +119,7 @@ public class GuiEventListener implements Listener {
         Map<Integer, String>         checkItems = guiBuilder.getCheckItems(guiKey);
         Map<Integer, Boolean>        copyMap    = guiBuilder.getCopyItems(guiKey);
         Map<Integer,String>          logicMap = guiBuilder.getButtonLogic(guiKey);
+        Map<Integer, Boolean>        wholeMap   = guiBuilder.getWholeStack(guiKey);
 
 
         int page = guiBuilder.getPage(p.getUniqueId(), guiKey);
@@ -382,21 +383,32 @@ public class GuiEventListener implements Listener {
                 }
 
                 boolean copyFlag = copyMap.getOrDefault(clicked, false);
+                boolean wholeFlag = wholeMap.getOrDefault(clicked, false);
+
 
                 /* validate items (unless copy_item:true) */
-                boolean valid = true;
-                if (!copyFlag) {
-                    for (int s : targets) {
-                        ItemStack it = e.getInventory().getItem(s);
-                        if (it == null) { valid = false; break; }
-                        var entry = rewardHandler.groupMgr()
-                                .getEntryForItem(resolveKey(it));
+                boolean hasAny = false;
+                boolean valid  = true;
+
+                for (int s : targets) {
+                    ItemStack it = e.getInventory().getItem(s);
+                    if (it == null || it.getType() == Material.AIR) {
+                        if (!copyFlag) { valid = false; }     // empty slot only matters if we DO validate
+                        continue;
+                    }
+
+                    hasAny = true;
+
+                    if (!copyFlag) {                          // full reward-group validation
+                        var entry = rewardHandler.groupMgr().getEntryForItem(resolveKey(it));
                         if (entry == null || !entry.groupName().equals(group)) {
                             valid = false; break;
                         }
                     }
                 }
-                if (!valid) { p.sendMessage("§cInvalid item(s) or wrong group."); return; }
+
+                if (!hasAny) { p.sendMessage("§cPut at least one item into the linked slots."); return; }
+                if (!valid)   { p.sendMessage("§cInvalid item(s) for this submission.");        return; }
 
                 /* ----- fee handling ----- */
                 double fee = costs.getOrDefault(clicked, 0.0);
@@ -411,21 +423,36 @@ public class GuiEventListener implements Listener {
                 /* ----- queue / copy / consume ----- */
                 for (int s : targets) {
                     ItemStack it = e.getInventory().getItem(s);
-                    if (it != null) rewardHandler.queueReward(p.getUniqueId(), it);
-                    if (copyFlag && it != null)
-                        rewardHandler.playerData()
-                                .addStackReward(p.getUniqueId(), group, it);
+                    if (it == null) continue;
 
-                    if (actions.getOrDefault(s,InputActionType.NONE) == InputActionType.CONSUME) {
-                        int rem = perStack.getOrDefault(s,false)
-                                ? Objects.requireNonNull(it).getAmount()
-                                : 1;
-                        int left = Objects.requireNonNull(it).getAmount() - rem;
-                        if (left > 0) it.setAmount(left);
-                        else          e.getInventory().setItem(s, null);
+                    /* 1) add rewards – whole stack or single item */
+                    int rewardAmt = wholeFlag ? it.getAmount() : 1;
+                    var entry = rewardHandler.groupMgr().getEntryForItem(resolveKey(it));
+                    if (entry != null) {
+                        rewardHandler.playerData()
+                                .addReward(p.getUniqueId(),
+                                        entry.groupName(),
+                                        entry.rewardId(),
+                                        rewardAmt);
+                    }
+
+                    /* 2) optional copy of the whole stack */
+                    if (copyFlag) {
+                        rewardHandler.playerData()
+                                .addStackReward(p.getUniqueId(), group, it.clone());
+                    }
+
+                    /* 3) consume */
+                    if (actions.getOrDefault(s, InputActionType.NONE) == InputActionType.CONSUME) {
+                        if (wholeFlag) {
+                            e.getInventory().setItem(s, null);          // eat everything
+                        } else {
+                            int left = it.getAmount() - 1;              // eat one
+                            if (left > 0) it.setAmount(left);
+                            else          e.getInventory().setItem(s, null);
+                        }
                     }
                 }
-
                 guiBuilder.handleButtonClick(p, guiKey, clicked);
 
                 paintRetrieval(e.getInventory(),

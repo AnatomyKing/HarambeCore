@@ -55,6 +55,8 @@ public class GuiBuilder {
     private final Map<String, Map<Integer, Boolean>>                 guiCopyItems            = new HashMap<>();
     private final Map<String, String>                                guiRtpWorld             = new HashMap<>();
     private final Map<String, Map<Integer, String>>                  guiSlotPermissions      = new HashMap<>();
+    private final Map<String, Map<Integer, Boolean>>                 guiWholeStack           = new HashMap<>();
+
     private final Map<UUID, Map<String,Integer>>                     guiPage                 = new ConcurrentHashMap<>();
     private final Map<String,Integer>                                guiMaxPages             = new ConcurrentHashMap<>();
     private final Map<UUID, Map<String, Map<Integer, ItemStack>>>    sessionCache            = new ConcurrentHashMap<>();
@@ -115,6 +117,8 @@ public class GuiBuilder {
     public Map<Integer, Boolean>               getCopyItems(String key)                  { return guiCopyItems.getOrDefault(key, Collections.emptyMap()); }
     public Map<Integer, String>                getSlotPermissions(String key)            { return guiSlotPermissions.getOrDefault(key, Collections.emptyMap()); }
     public Map<Integer,String>                 getButtonLogic(String guiKey)             { return buttonLogicCache.getOrDefault(guiKey, Collections.emptyMap()); }
+    public Map<Integer, Boolean>               getWholeStack(String key)                 { return guiWholeStack.getOrDefault(key, Collections.emptyMap());
+    }
 
     public int  getPage(UUID id, String key)                                             { return guiPage.getOrDefault(id, Collections.emptyMap()).getOrDefault(key,0);}
     public void setPage(UUID id, String key,int p)                                       { guiPage.computeIfAbsent(id,k->new HashMap<>()).put(key,p);}
@@ -214,6 +218,8 @@ public class GuiBuilder {
         Map<Integer, Boolean>         scaleMap        = new HashMap<>();
         Map<Integer, Boolean>         copyMap         = new HashMap<>();
         Map<Integer, String>          permMap         = new HashMap<>();
+        Map<Integer, Boolean>         wholeStackMap   = new HashMap<>();
+
 
         ConfigurationSection buttonsSection = guiSection.getConfigurationSection("buttons");
         if (buttonsSection != null) {
@@ -440,10 +446,12 @@ public class GuiBuilder {
 
                         /*  copy_item flag (only relevant for CHECK_BUTTON)  */
                         boolean copyFlag = false;
+                        boolean wholeStackFlag = false;
                         if (slotType == SlotType.CHECK_BUTTON && bc.isConfigurationSection("check_item")) {
-                            copyFlag = Objects.requireNonNull(
-                                            bc.getConfigurationSection("check_item"))
-                                    .getBoolean("copy_item", false);
+                            ConfigurationSection ci = bc.getConfigurationSection("check_item");
+                            assert ci != null;
+                            copyFlag       = ci.getBoolean("copy_item",   false);
+                            wholeStackFlag = ci.getBoolean("whole_stack", false);
                         }
 
                         /* ------------------------------------------------------------ */
@@ -475,7 +483,10 @@ public class GuiBuilder {
                             if (costPay)          payoutMap.put(s, true);
                             if (scaleOut)         scaleMap.put(s, true);
 
-                            if (slotType == SlotType.CHECK_BUTTON && copyFlag) copyMap.put(s, true);
+                            if (slotType == SlotType.CHECK_BUTTON && copyFlag)       copyMap.put(s, true);
+                            if (slotType == SlotType.CHECK_BUTTON && wholeStackFlag) wholeStackMap.put(s, true);   // NEW
+
+
 
                             /* command logic tag */
                             if (at == ActionType.COMMAND && logic != null)
@@ -532,6 +543,8 @@ public class GuiBuilder {
         guiScaleWithOutput.put(guiKey, scaleMap);
         guiCopyItems.put(guiKey, copyMap);
         guiSlotPermissions.put(guiKey, permMap);
+        guiCopyItems.put(guiKey, copyMap);
+        guiWholeStack.put(guiKey, wholeStackMap);
 
 
         /* ----------  inject session-cached items  ---------- */
