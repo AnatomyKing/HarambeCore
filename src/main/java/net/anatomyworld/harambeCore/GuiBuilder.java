@@ -57,6 +57,7 @@ public class GuiBuilder {
     private final Map<String, Map<Integer, String>>                  guiSlotPermissions      = new HashMap<>();
     private final Map<String, Map<Integer, Boolean>>                 guiWholeStack           = new HashMap<>();
     private final Map<String, Map<Integer, Integer>>                 guiSlotCooldowns        = new HashMap<>();
+    private final Map<String, Map<Integer, String>>                  guiAlreadyPerms         = new HashMap<>();
 
     private final Map<UUID, Map<String,Integer>>                     guiPage                 = new ConcurrentHashMap<>();
     private final Map<String,Integer>                                guiMaxPages             = new ConcurrentHashMap<>();
@@ -64,6 +65,7 @@ public class GuiBuilder {
     private static final int                                         PAGE_STRIDE             = 1000;
 
     private static int  virtualIndex(int page, int localSlot) {return page * PAGE_STRIDE + localSlot;}
+
 
 
 
@@ -119,8 +121,8 @@ public class GuiBuilder {
     public Map<Integer, String>                getSlotPermissions(String key)            { return guiSlotPermissions.getOrDefault(key, Collections.emptyMap()); }
     public Map<Integer,String>                 getButtonLogic(String guiKey)             { return buttonLogicCache.getOrDefault(guiKey, Collections.emptyMap()); }
     public Map<Integer, Boolean>               getWholeStack(String key)                 { return guiWholeStack.getOrDefault(key, Collections.emptyMap());}
-    public Map<Integer, Integer>               getSlotCooldown(String key)               { return guiSlotCooldowns.getOrDefault(key, Collections.emptyMap());
-    }
+    public Map<Integer, Integer>               getSlotCooldown(String key)               { return guiSlotCooldowns.getOrDefault(key, Collections.emptyMap());}
+    public Map<Integer, String>                getAlreadyPerms(String key)               { return guiAlreadyPerms.getOrDefault(key, Collections.emptyMap());}
 
     public int  getPage(UUID id, String key)                                             { return guiPage.getOrDefault(id, Collections.emptyMap()).getOrDefault(key,0);}
     public void setPage(UUID id, String key,int p)                                       { guiPage.computeIfAbsent(id,k->new HashMap<>()).put(key,p);}
@@ -149,6 +151,7 @@ public class GuiBuilder {
         guiCheckItems.clear();
         guiRewardGroups.clear();
         guiSlotPermissions.clear();
+        guiAlreadyPerms.clear();
         guiCopyItems.clear();
         sessionCache.clear();
         guiSlotCooldowns.clear();
@@ -221,8 +224,10 @@ public class GuiBuilder {
         Map<Integer, Boolean>         scaleMap        = new HashMap<>();
         Map<Integer, Boolean>         copyMap         = new HashMap<>();
         Map<Integer, String>          permMap         = new HashMap<>();
+        Map<Integer, String>          alreadyPermMap  = new HashMap<>();
         Map<Integer, Boolean>         wholeStackMap   = new HashMap<>();
         Map<Integer, Integer>         slotCooldowns   = new HashMap<>();
+
 
 
         ConfigurationSection buttonsSection = guiSection.getConfigurationSection("buttons");
@@ -236,7 +241,8 @@ public class GuiBuilder {
 
                 List<Integer> slots = bc.getIntegerList("slot");
                 SlotType slotType;
-                String permLine = bc.getString("perm", null);
+                String permAlreadyLine = bc.getString("perm_already", null);
+                String permLine        = bc.getString("perm", null);
                 try { slotType = SlotType.valueOf(bc.getString("type", "FILLER").toUpperCase(Locale.ROOT)); }
                 catch (IllegalArgumentException ex) { continue; }
 
@@ -286,6 +292,7 @@ public class GuiBuilder {
                         for (int s : slots) {
                             slotTypes.put(s, slotType);
                             inputActions.put(s, ia);
+                            if (permAlreadyLine != null) alreadyPermMap.put(s, permAlreadyLine);
                             if (permLine != null) permMap.put(s, permLine);
                             if (ecoCost > 0) slotCosts.put(s, ecoCost);
                             if (costPS)      perStackMap.put(s, true);
@@ -312,6 +319,7 @@ public class GuiBuilder {
                         /* ─── now do the normal OUTPUT_SLOT setup ─── */
                         for (int s : slots) {
                             slotTypes.put(s, SlotType.OUTPUT_SLOT);
+                            if (permAlreadyLine != null) alreadyPermMap.put(s, permAlreadyLine);
                             if (permLine != null)     permMap.put(s, permLine);
                             if (ecoCost > 0)          slotCosts.put(s, ecoCost);
                             if (costPS)               perStackMap.put(s, true);
@@ -347,6 +355,7 @@ public class GuiBuilder {
                             slotTypes.put(s, slotType);
                             if (cooldownTicks > 0) slotCooldowns.put(s, cooldownTicks);
                             gui.setItem(s, cachedFillerItem);
+                            if (permAlreadyLine != null) alreadyPermMap.put(s, permAlreadyLine);
                             if (permLine != null) permMap.put(s, permLine);
                             if (ecoCost > 0) slotCosts.put(s, ecoCost);
                             if (costPS)      perStackMap.put(s, true);
@@ -406,6 +415,7 @@ public class GuiBuilder {
                                 gui.setItem(s, icon);
                                 slotTypes.put(s, SlotType.BUTTON);
                                 buttonLogics.put(s, "page:" + (delta > 0 ? "+" : "") + delta);
+                                if (permAlreadyLine != null) alreadyPermMap.put(s, permAlreadyLine);
                                 if (permLine != null) permMap.put(s, permLine);
                             }
                             continue;                 // PAGE finished – skip the rest
@@ -483,7 +493,7 @@ public class GuiBuilder {
                             gui.setItem(s, btnItem);
                             slotTypes.put(s, slotType);
                             if (cooldownTicks > 0) slotCooldowns.put(s, cooldownTicks);
-
+                            if (permAlreadyLine != null) alreadyPermMap.put(s, permAlreadyLine);
                             if (permLine != null) permMap.put(s, permLine);
                             if (ecoCost  > 0)     slotCosts.put(s, ecoCost);
                             if (costPS)           perStackMap.put(s, true);
@@ -550,6 +560,7 @@ public class GuiBuilder {
         guiScaleWithOutput.put(guiKey, scaleMap);
         guiCopyItems.put(guiKey, copyMap);
         guiSlotPermissions.put(guiKey, permMap);
+        guiAlreadyPerms.put(guiKey,   alreadyPermMap);
         guiCopyItems.put(guiKey, copyMap);
         guiWholeStack.put(guiKey, wholeStackMap);
         guiSlotCooldowns.put(guiKey, slotCooldowns);

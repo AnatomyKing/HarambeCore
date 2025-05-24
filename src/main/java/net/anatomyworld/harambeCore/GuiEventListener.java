@@ -123,6 +123,14 @@ public class GuiEventListener implements Listener {
 
         Map<Integer, String>         perms      = guiBuilder.getSlotPermissions(guiKey);
 
+        /* ──────────────── ALREADY-OWN PERMISSION GATE ──────────────── */
+        Map<Integer, String> alreadyMap = guiBuilder.getAlreadyPerms(guiKey);
+        String blockNode = alreadyMap.get(clicked);
+        if (blockNode != null && p.hasPermission(blockNode)) {
+            e.setCancelled(true);
+            p.sendMessage("§cYou already own that.");
+            return;               // EARLY EXIT – nothing else runs
+        }
         /* ────────────────── PERMISSION GATE ────────────────── */
         String needed = perms.get(clicked);
         if (needed != null && !p.hasPermission(needed)) {
