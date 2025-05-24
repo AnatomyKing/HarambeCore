@@ -24,6 +24,7 @@ public class GuiEventListener implements Listener {
     private final GuiBuilder    guiBuilder;
     private final RewardHandler rewardHandler;
     private final ItemRegistry  itemRegistry;
+    private final Map<UUID, Map<String, Map<Integer, Long>>> cooldownTracker = new HashMap<>();
 
     public GuiEventListener(GuiBuilder guiBuilder,
                             RewardHandler rewardHandler,
@@ -76,6 +77,7 @@ public class GuiEventListener implements Listener {
     @EventHandler
     public void onInventoryClick(InventoryClickEvent e) {
         if (!(e.getWhoClicked() instanceof Player p)) return;
+
         if (e.getClickedInventory() == null)        return;
 
         String guiKey = guiBuilder.getGuiKeyByInventory(p, e.getInventory());
@@ -90,6 +92,28 @@ public class GuiEventListener implements Listener {
 
         int clicked = e.getSlot();
         if (e.getRawSlot() >= e.getInventory().getSize()) return;
+
+        /* ==== COOLDOWN START ==== */
+        Integer cdTicks = guiBuilder.getSlotCooldown(guiKey).get(clicked);
+        if (cdTicks != null && cdTicks > 0) {
+            long waitMs = cdTicks * 50L;                      // ticks → ms
+            long now    = System.currentTimeMillis();
+
+            long last = cooldownTracker
+                    .computeIfAbsent(p.getUniqueId(), k -> new HashMap<>())
+                    .computeIfAbsent(guiKey,         k -> new HashMap<>())
+                    .getOrDefault(clicked, 0L);
+
+            if (now - last < waitMs) {
+                e.setCancelled(true);
+                double left = (waitMs - (now - last)) / 1000.0;
+                p.sendMessage(String.format("§cWait %.1f s before using that again.", left));
+                return;
+            }
+            // mark successful click
+            cooldownTracker.get(p.getUniqueId()).get(guiKey).put(clicked, now);
+        }
+        /* ==== COOLDOWN END ==== */
 
 
 
@@ -120,6 +144,7 @@ public class GuiEventListener implements Listener {
         Map<Integer, Boolean>        copyMap    = guiBuilder.getCopyItems(guiKey);
         Map<Integer,String>          logicMap = guiBuilder.getButtonLogic(guiKey);
         Map<Integer, Boolean>        wholeMap   = guiBuilder.getWholeStack(guiKey);
+
 
 
         int page = guiBuilder.getPage(p.getUniqueId(), guiKey);

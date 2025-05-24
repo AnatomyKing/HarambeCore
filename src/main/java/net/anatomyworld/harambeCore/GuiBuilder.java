@@ -56,6 +56,7 @@ public class GuiBuilder {
     private final Map<String, String>                                guiRtpWorld             = new HashMap<>();
     private final Map<String, Map<Integer, String>>                  guiSlotPermissions      = new HashMap<>();
     private final Map<String, Map<Integer, Boolean>>                 guiWholeStack           = new HashMap<>();
+    private final Map<String, Map<Integer, Integer>>                 guiSlotCooldowns        = new HashMap<>();
 
     private final Map<UUID, Map<String,Integer>>                     guiPage                 = new ConcurrentHashMap<>();
     private final Map<String,Integer>                                guiMaxPages             = new ConcurrentHashMap<>();
@@ -117,7 +118,8 @@ public class GuiBuilder {
     public Map<Integer, Boolean>               getCopyItems(String key)                  { return guiCopyItems.getOrDefault(key, Collections.emptyMap()); }
     public Map<Integer, String>                getSlotPermissions(String key)            { return guiSlotPermissions.getOrDefault(key, Collections.emptyMap()); }
     public Map<Integer,String>                 getButtonLogic(String guiKey)             { return buttonLogicCache.getOrDefault(guiKey, Collections.emptyMap()); }
-    public Map<Integer, Boolean>               getWholeStack(String key)                 { return guiWholeStack.getOrDefault(key, Collections.emptyMap());
+    public Map<Integer, Boolean>               getWholeStack(String key)                 { return guiWholeStack.getOrDefault(key, Collections.emptyMap());}
+    public Map<Integer, Integer>               getSlotCooldown(String key)               { return guiSlotCooldowns.getOrDefault(key, Collections.emptyMap());
     }
 
     public int  getPage(UUID id, String key)                                             { return guiPage.getOrDefault(id, Collections.emptyMap()).getOrDefault(key,0);}
@@ -149,6 +151,7 @@ public class GuiBuilder {
         guiSlotPermissions.clear();
         guiCopyItems.clear();
         sessionCache.clear();
+        guiSlotCooldowns.clear();
 
         //huskhomes
         huskHomeSlots.clear();
@@ -219,6 +222,7 @@ public class GuiBuilder {
         Map<Integer, Boolean>         copyMap         = new HashMap<>();
         Map<Integer, String>          permMap         = new HashMap<>();
         Map<Integer, Boolean>         wholeStackMap   = new HashMap<>();
+        Map<Integer, Integer>         slotCooldowns   = new HashMap<>();
 
 
         ConfigurationSection buttonsSection = guiSection.getConfigurationSection("buttons");
@@ -242,6 +246,7 @@ public class GuiBuilder {
                 boolean costPay  = false;
                 boolean scaleOut = false;
                 Object  rc       = bc.get("cost");
+                int cooldownTicks = bc.getInt("cooldown", 0);
                 if (rc instanceof Number n) {
                     ecoCost = n.doubleValue();
                 } else if (rc instanceof ConfigurationSection cs) {
@@ -340,6 +345,7 @@ public class GuiBuilder {
                         /* -------- paint placeholders & cache cost flags -------- */
                         for (int s : slots) {
                             slotTypes.put(s, slotType);
+                            if (cooldownTicks > 0) slotCooldowns.put(s, cooldownTicks);
                             gui.setItem(s, cachedFillerItem);
                             if (permLine != null) permMap.put(s, permLine);
                             if (ecoCost > 0) slotCosts.put(s, ecoCost);
@@ -476,6 +482,7 @@ public class GuiBuilder {
                         for (int s : slots) {
                             gui.setItem(s, btnItem);
                             slotTypes.put(s, slotType);
+                            if (cooldownTicks > 0) slotCooldowns.put(s, cooldownTicks);
 
                             if (permLine != null) permMap.put(s, permLine);
                             if (ecoCost  > 0)     slotCosts.put(s, ecoCost);
@@ -545,6 +552,7 @@ public class GuiBuilder {
         guiSlotPermissions.put(guiKey, permMap);
         guiCopyItems.put(guiKey, copyMap);
         guiWholeStack.put(guiKey, wholeStackMap);
+        guiSlotCooldowns.put(guiKey, slotCooldowns);
 
 
         /* ----------  inject session-cached items  ---------- */
