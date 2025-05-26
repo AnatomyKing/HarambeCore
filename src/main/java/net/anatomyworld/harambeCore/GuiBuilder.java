@@ -21,6 +21,11 @@ import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.plugin.java.JavaPlugin;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Locale;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Registry;
+import org.bukkit.Sound;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
@@ -58,11 +63,14 @@ public class GuiBuilder {
     private final Map<String, Map<Integer, Boolean>>                 guiWholeStack           = new HashMap<>();
     private final Map<String, Map<Integer, Integer>>                 guiSlotCooldowns        = new HashMap<>();
     private final Map<String, Map<Integer, String>>                  guiAlreadyPerms         = new HashMap<>();
+    private final Map<String, Map<Integer, SoundData>>               guiClickSounds = new HashMap<>();
 
     private final Map<UUID, Map<String,Integer>>                     guiPage                 = new ConcurrentHashMap<>();
     private final Map<String,Integer>                                guiMaxPages             = new ConcurrentHashMap<>();
     private final Map<UUID, Map<String, Map<Integer, ItemStack>>>    sessionCache            = new ConcurrentHashMap<>();
     private static final int                                         PAGE_STRIDE             = 1000;
+    private record SoundData(Sound type, float volume, float pitch) {}
+
 
     private static int  virtualIndex(int page, int localSlot) {return page * PAGE_STRIDE + localSlot;}
 
@@ -155,6 +163,7 @@ public class GuiBuilder {
         guiCopyItems.clear();
         sessionCache.clear();
         guiSlotCooldowns.clear();
+        guiClickSounds.clear();
 
         //huskhomes
         huskHomeSlots.clear();
@@ -307,8 +316,8 @@ public class GuiBuilder {
                                 bc.getString("action", "REWARD_GET").toUpperCase(Locale.ROOT));
                         String    rGroup = extractRewardGroup(bc);
 
-    /* ─── NEW: for death-chest slots we need both logic *and* an
-       entry in rewardGroups so groupMap.get(slot) != null later ─── */
+                         /* ─── NEW: for death-chest slots we need both logic *and* an
+                         entry in rewardGroups so groupMap.get(slot) != null later ─── */
                         if (at == ActionType.DEATH_GET) {
                             for (int s : slots) {
                                 buttonLogics.put(s, "DEATH_GET");
@@ -346,15 +355,51 @@ public class GuiBuilder {
                                 bc.getString("action", "TELEPORT").toUpperCase(Locale.ROOT));
 
                         /* -------- remember the design block once per action -------- */
+                        ConfigurationSection d = bc.getConfigurationSection("design");
+
                         huskHomeDesigns
                                 .computeIfAbsent(guiKey, k -> new EnumMap<>(ActionType.class))
-                                .putIfAbsent(at, bc.getConfigurationSection("design"));
+                                .putIfAbsent(at, d);   // ← uses the same ‘d’, so only one call
+
+                        /* SOUND */
+                        SoundData soundData = null;
+                        if (d != null && d.contains("sound")) {
+
+                            /* -- compact form: sound: block.powder_snow.step -- */
+                            if (d.isString("sound")) {
+                                String id = d.getString("sound");
+                                Sound s = lookupSound(id);
+                                if (s != null) soundData = new SoundData(s, 1.0f, 1.0f);
+                                else plugin.getLogger().warning("Invalid sound '" + id + "' in GUI " + guiKey);
+                            }
+                            else if (d.isConfigurationSection("sound")) {
+                                ConfigurationSection sc = d.getConfigurationSection("sound");
+                                String id = sc.getString("type", "block.note_block.pling");
+                                Sound  s  = lookupSound(id);
+                                if (s != null) {
+                                    float v = (float) sc.getDouble("volume", 1.0);
+                                    float p = (float) sc.getDouble("pitch", 1.0);
+                                    soundData = new SoundData(s, v, p);
+                                } else plugin.getLogger().warning("Invalid sound '" + id + "' in GUI " + guiKey);
+                            }
+                        }
+
+
 
                         /* -------- paint placeholders & cache cost flags -------- */
                         for (int s : slots) {
                             slotTypes.put(s, slotType);
                             if (cooldownTicks > 0) slotCooldowns.put(s, cooldownTicks);
                             gui.setItem(s, cachedFillerItem);
+
+                            // === SOUND SUPPORT BEGIN (cache) ===
+                            if (soundData != null) {
+                                guiClickSounds
+                                        .computeIfAbsent(guiKey, k -> new HashMap<>())
+                                        .put(s, soundData);
+                            }
+                            // === SOUND SUPPORT END (cache) ===
+
                             if (permAlreadyLine != null) alreadyPermMap.put(s, permAlreadyLine);
                             if (permLine != null) permMap.put(s, permLine);
                             if (ecoCost > 0) slotCosts.put(s, ecoCost);
@@ -405,6 +450,29 @@ public class GuiBuilder {
                             int  delta = bc.getInt("page_offset", 0);          // +1 or −1
                             ConfigurationSection d = bc.getConfigurationSection("design");
 
+                            /* SOUND */
+                            SoundData soundData = null;
+                            if (d != null && d.contains("sound")) {
+
+                                /* -- compact form: sound: block.powder_snow.step -- */
+                                if (d.isString("sound")) {
+                                    String id = d.getString("sound");
+                                    Sound s = lookupSound(id);
+                                    if (s != null) soundData = new SoundData(s, 1.0f, 1.0f);
+                                    else plugin.getLogger().warning("Invalid sound '" + id + "' in GUI " + guiKey);
+                                }
+                                else if (d.isConfigurationSection("sound")) {
+                                    ConfigurationSection sc = d.getConfigurationSection("sound");
+                                    String id = sc.getString("type", "block.note_block.pling");
+                                    Sound  s  = lookupSound(id);
+                                    if (s != null) {
+                                        float v = (float) sc.getDouble("volume", 1.0);
+                                        float p = (float) sc.getDouble("pitch", 1.0);
+                                        soundData = new SoundData(s, v, p);
+                                    } else plugin.getLogger().warning("Invalid sound '" + id + "' in GUI " + guiKey);
+                                }
+                            }
+
                             ItemStack icon = createButtonItem(
                                     d != null ? d.getString("material", "ARROW") : "ARROW",
                                     d != null ? d.getString("name",
@@ -413,6 +481,14 @@ public class GuiBuilder {
 
                             for (int s : slots) {
                                 gui.setItem(s, icon);
+                                // === SOUND SUPPORT BEGIN (cache) ===
+                                if (soundData != null) {
+                                    guiClickSounds
+                                            .computeIfAbsent(guiKey, k -> new HashMap<>())
+                                            .put(s, soundData);
+                                }
+                                // === SOUND SUPPORT END (cache) ===
+
                                 slotTypes.put(s, SlotType.BUTTON);
                                 buttonLogics.put(s, "page:" + (delta > 0 ? "+" : "") + delta);
                                 if (permAlreadyLine != null) alreadyPermMap.put(s, permAlreadyLine);
@@ -474,6 +550,32 @@ public class GuiBuilder {
                         /*  4)  Button item design                                      */
                         /* ------------------------------------------------------------ */
                         ConfigurationSection d = bc.getConfigurationSection("design");
+
+                        /* SOUND */
+                        SoundData soundData = null;
+                        if (d != null && d.contains("sound")) {
+
+                            /* -- compact form: sound: block.powder_snow.step -- */
+                            if (d.isString("sound")) {
+                                String id = d.getString("sound");
+                                Sound s = lookupSound(id);
+                                if (s != null) soundData = new SoundData(s, 1.0f, 1.0f);
+                                else plugin.getLogger().warning("Invalid sound '" + id + "' in GUI " + guiKey);
+                            }
+                            else if (d.isConfigurationSection("sound")) {
+                                ConfigurationSection sc = d.getConfigurationSection("sound");
+                                String id = sc.getString("type", "block.note_block.pling");
+                                Sound  s  = lookupSound(id);
+                                if (s != null) {
+                                    float v = (float) sc.getDouble("volume", 1.0);
+                                    float p = (float) sc.getDouble("pitch", 1.0);
+                                    soundData = new SoundData(s, v, p);
+                                } else plugin.getLogger().warning("Invalid sound '" + id + "' in GUI " + guiKey);
+                            }
+                        }
+
+
+
                         ItemStack btnItem;
 
                         if (d != null && d.contains("mythic")) {
@@ -491,6 +593,15 @@ public class GuiBuilder {
                         /* ------------------------------------------------------------ */
                         for (int s : slots) {
                             gui.setItem(s, btnItem);
+
+                            // === SOUND SUPPORT BEGIN (cache) ===
+                            if (soundData != null) {
+                                guiClickSounds
+                                        .computeIfAbsent(guiKey, k -> new HashMap<>())
+                                        .put(s, soundData);
+                            }
+                            // === SOUND SUPPORT END (cache) ===
+
                             slotTypes.put(s, slotType);
                             if (cooldownTicks > 0) slotCooldowns.put(s, cooldownTicks);
                             if (permAlreadyLine != null) alreadyPermMap.put(s, permAlreadyLine);
@@ -589,6 +700,11 @@ public class GuiBuilder {
 
     /* ---------------- helper methods --------------------------- */
 
+    @Nullable
+    private Sound lookupSound(@NotNull String id) {
+        return Registry.SOUNDS.get(NamespacedKey.minecraft(id));
+    }
+
     private String extractRewardGroup(ConfigurationSection section) {
         if (section.isConfigurationSection("accepted_item"))
             return Objects.requireNonNull(
@@ -630,6 +746,16 @@ public class GuiBuilder {
         Map<Integer, String> logics  = buttonLogicCache.getOrDefault(guiKey, Collections.emptyMap());
         Map<Integer, String> outputs = guiOutputItems.getOrDefault(guiKey, Collections.emptyMap());
         Map<Integer, Integer> pays   = guiPayoutAmounts.getOrDefault(guiKey, Collections.emptyMap());
+
+
+        // === SOUND SUPPORT BEGIN (play) ===
+        SoundData snd = guiClickSounds
+                .getOrDefault(guiKey, Collections.emptyMap())
+                .get(slot);
+        if (snd != null) {
+            player.playSound(player.getLocation(), snd.type(), snd.volume(), snd.pitch());
+        }
+        // === SOUND SUPPORT END (play) ===
 
         /* ── 1. COMMAND / TELEPORT / GUI / NOPERM logic ───────────── */
         if (logics.containsKey(slot)) {
@@ -782,6 +908,7 @@ public class GuiBuilder {
         int page  = getPage(uuid, guiKey);
 
         Map<Integer, SlotType> slots = guiSlotTypes.getOrDefault(guiKey, Collections.emptyMap());
+
 
         /* ----------------------------------------------------------------
          * 1)  Persist real STORAGE_SLOTs to disk via StorageManager
