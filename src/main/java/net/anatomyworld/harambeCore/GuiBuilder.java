@@ -69,7 +69,9 @@ public class GuiBuilder {
     private final Map<String,Integer>                                guiMaxPages             = new ConcurrentHashMap<>();
     private final Map<UUID, Map<String, Map<Integer, ItemStack>>>    sessionCache            = new ConcurrentHashMap<>();
     private static final int                                         PAGE_STRIDE             = 1000;
-    private record SoundData(Sound type, float volume, float pitch) {}
+    public record SoundData(Sound type, float volume, float pitch) {}
+
+
 
 
     private static int  virtualIndex(int page, int localSlot) {return page * PAGE_STRIDE + localSlot;}
@@ -700,9 +702,17 @@ public class GuiBuilder {
 
     /* ---------------- helper methods --------------------------- */
 
+
     @Nullable
     private Sound lookupSound(@NotNull String id) {
         return Registry.SOUNDS.get(NamespacedKey.minecraft(id));
+    }
+
+    @Nullable
+    public SoundData getClickSound(@NotNull String guiKey, int slot) {
+        return guiClickSounds
+                .getOrDefault(guiKey, Collections.emptyMap())
+                .get(slot);
     }
 
     private String extractRewardGroup(ConfigurationSection section) {

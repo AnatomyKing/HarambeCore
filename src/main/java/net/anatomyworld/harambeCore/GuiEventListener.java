@@ -334,9 +334,9 @@ public class GuiEventListener implements Listener {
                 List<Integer> targets = conn.get(clicked);      // linked INPUT_SLOTs
                 String tag = logicMap.get(clicked);             // custom tag
 
-/* ============================================================
-   A.  Death-key submission / validation (“DEATH_ITEMS”)
-   ============================================================ */
+                 /* ============================================================
+                 A.  Death-key submission / validation (“DEATH_ITEMS”)
+                 ============================================================ */
                 if ("DEATH_ITEMS".equalsIgnoreCase(tag)) {
 
                     if (targets == null || targets.isEmpty()) {
@@ -347,7 +347,8 @@ public class GuiEventListener implements Listener {
                     ItemStack keyStack = e.getInventory().getItem(targets.get(0));
                     KeyInfo info = DeathListener.readKey(keyStack);
                     if (info == null) {                         // invalid or wrong item
-                        p.sendMessage("§cInvalid death key."); return;
+                        p.sendMessage("§cInvalid death key.");
+                        return;
                     }
 
                     /* ✦ NEW ✦  do not allow redemption in a different MV-Inv group */
@@ -359,14 +360,14 @@ public class GuiEventListener implements Listener {
                     /* death-<mvGroup>-<ownerUuid> */
                     String deathGroup = "death-" + info.group() + "-" + info.owner();
 
-                    /* ─── (C) bail out if that chest has expired ─── */
+                    // chest expired?
                     if (rewardHandler.playerData().isExpired(info.owner(), deathGroup)) {
                         p.sendMessage("§cThat death chest decayed after 1 hour.");
                         rewardHandler.playerData().removeGroup(info.owner(), deathGroup);
                         return;
                     }
 
-                    /* ─── (D) chest empty?  (NEW) ─────────────────── */
+                    // chest empty?
                     boolean noStacks = rewardHandler.playerData()
                             .getStackRewards(info.owner(), deathGroup).isEmpty();
                     boolean noIds = rewardHandler.playerData()
@@ -376,10 +377,9 @@ public class GuiEventListener implements Listener {
                         return;                     // ↞ key *not* consumed
                     }
 
-                    /* 1. remember mapping so OUTPUT_SLOTs know what to show */
-                    Map<Integer,String> globalGroups = guiBuilder.getRewardGroups(guiKey);
-
-                    for (Map.Entry<Integer,SlotType> entry : slotTypes.entrySet()) {
+                    /* 1. map OUTPUT_SLOTs to this death-group so they can show loot */
+                    Map<Integer, String> globalGroups = guiBuilder.getRewardGroups(guiKey);
+                    for (Map.Entry<Integer, SlotType> entry : slotTypes.entrySet()) {
                         int slot = entry.getKey();
                         if (entry.getValue() == SlotType.OUTPUT_SLOT &&
                                 "DEATH_GET".equalsIgnoreCase(logicMap.get(slot))) {
@@ -389,19 +389,28 @@ public class GuiEventListener implements Listener {
                     }
 
                     /* 2. repaint loot immediately */
-                    paintRetrieval(e.getInventory(),
+                    paintRetrieval(
+                            e.getInventory(),
                             slotTypes,
                             groupMap,
                             deathGroup,
                             rewardHandler.playerData()
-                                    .getAllRewards(info.owner(), deathGroup));
+                                    .getAllRewards(info.owner(), deathGroup)
+                    );
 
-                    /* 3. consume one key  (only reached if chest exists) */
+                    /* 3. consume one key (only reached if chest exists) */
                     keyStack.setAmount(keyStack.getAmount() - 1);
                     if (keyStack.getAmount() <= 0) {
                         e.getInventory().setItem(targets.get(0), null);
                     }
-                    return;  // ✔ done – skip normal flow
+
+                    /* 4. play configured click-sound (if any) */
+                    GuiBuilder.SoundData snd = guiBuilder.getClickSound(guiKey, clicked);
+                    if (snd != null) {
+                        p.playSound(p.getLocation(), snd.type(), snd.volume(), snd.pitch());
+                    }
+
+                    return;   // ✔ done – skip normal flow
                 }
 
 /* ============================================================
